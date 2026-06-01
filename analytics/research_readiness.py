@@ -294,6 +294,9 @@ class ResearchReadinessAnalyzer:
         if str(row.get("status") or "") != "OK":
             return False
 
+        if str(row.get("source") or "") == "FRED":
+            return False
+
         threshold_minutes = self.config.stale_after_minutes.get(stale_key)
         if threshold_minutes is None:
             return False

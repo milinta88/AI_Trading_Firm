@@ -91,6 +91,54 @@ def test_load_config_rejects_trade_execution_flag(tmp_path: Path, monkeypatch: p
         load_config(tmp_path)
 
 
+def test_load_config_applies_fred_stale_after_series_overrides(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_config(tmp_path)
+    (tmp_path / "config.yaml").write_text(
+        (tmp_path / "config.yaml").read_text(encoding="utf-8") + "\n"
+        + "\n".join(
+            [
+                "fred:",
+                "  base_url: https://api.stlouisfed.org/fred/series/observations",
+                "  timeout_seconds: 10",
+                "  stale_after_days_by_series:",
+                "    gold_fed_funds: 75",
+                "    gold_cpi: 75",
+                "  series:",
+                "    gold_us10y:",
+                "      series_id: DGS10",
+                "      data_type: us10y",
+                "      display_name: US10Y",
+                "      stale_after_days: 10",
+                "    gold_real_yield:",
+                "      series_id: DFII10",
+                "      data_type: real_yield",
+                "      display_name: Real Yield",
+                "      stale_after_days: 10",
+                "    gold_fed_funds:",
+                "      series_id: FEDFUNDS",
+                "      data_type: fed_funds",
+                "      display_name: Fed Funds",
+                "      stale_after_days: 45",
+                "    gold_cpi:",
+                "      series_id: CPIAUCSL",
+                "      data_type: cpi",
+                "      display_name: CPI",
+                "      stale_after_days: 45",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _clear_telegram_env(monkeypatch)
+
+    config = load_config(tmp_path)
+
+    assert config.fred_series["gold_fed_funds"].stale_after_days == 75
+    assert config.fred_series["gold_cpi"].stale_after_days == 75
+
+
 def _write_config(tmp_path: Path, execution_enabled: bool = False) -> None:
     (tmp_path / "config.yaml").write_text(
         "\n".join(

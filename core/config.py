@@ -263,7 +263,10 @@ def load_config(project_root: Path) -> AppConfig:
             fred_section.get("base_url", "https://api.stlouisfed.org/fred/series/observations")
         ).strip(),
         fred_timeout_seconds=int(fred_section.get("timeout_seconds", 10)),
-        fred_series=_build_fred_series_config(fred_section.get("series", {})),
+        fred_series=_build_fred_series_config(
+            fred_section.get("series", {}),
+            fred_section.get("stale_after_days_by_series", {}),
+        ),
         max_daily_loss_pct=float(risk_section.get("max_daily_loss_pct", 1.0)),
         max_weekly_loss_pct=float(risk_section.get("max_weekly_loss_pct", 3.0)),
         execution_enabled=_as_bool(risk_section.get("execution_enabled", False)),
@@ -557,24 +560,42 @@ def _clean_optional_text(value: str | None) -> str | None:
     return cleaned or None
 
 
-def _build_fred_series_config(raw_series: object) -> dict[str, FredSeriesConfig]:
+def _build_fred_series_config(
+    raw_series: object,
+    stale_after_days_by_series: object,
+) -> dict[str, FredSeriesConfig]:
     if not isinstance(raw_series, dict):
         return {}
 
+    stale_overrides = _build_fred_stale_overrides(stale_after_days_by_series)
     configured_series: dict[str, FredSeriesConfig] = {}
     for key, value in raw_series.items():
         if not isinstance(value, dict):
             continue
 
+        normalized_key = str(key)
         configured_series[str(key)] = FredSeriesConfig(
-            key=str(key),
+            key=normalized_key,
             series_id=str(value.get("series_id", "")).strip(),
             data_type=str(value.get("data_type", "")).strip(),
             display_name=str(value.get("display_name", key)).strip(),
-            stale_after_days=int(value.get("stale_after_days", 30)),
+            stale_after_days=stale_overrides.get(normalized_key, int(value.get("stale_after_days", 30))),
         )
 
     return configured_series
+
+
+def _build_fred_stale_overrides(raw_overrides: object) -> dict[str, int]:
+    if not isinstance(raw_overrides, dict):
+        return {}
+
+    stale_overrides: dict[str, int] = {}
+    for key, value in raw_overrides.items():
+        try:
+            stale_overrides[str(key)] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return stale_overrides
 
 
 def _build_paper_trading_config(raw_config: object) -> PaperTradingConfig:

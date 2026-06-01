@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, Callable
 
 import requests
 
@@ -22,12 +23,16 @@ class FredService:
         timeout_seconds: int,
         series_configs: dict[str, FredSeriesConfig],
         session: requests.Session | None = None,
+        rate_limit_retries: int = 2,
+        sleep_func: Callable[[float], None] | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url
         self.timeout_seconds = timeout_seconds
         self.series_configs = series_configs
         self.session = session or requests.Session()
+        self.rate_limit_retries = max(0, rate_limit_retries)
+        self.sleep_func = sleep_func or time.sleep
 
     def fetch_gold_macro_snapshots(self) -> dict[str, MarketDataPoint]:
         snapshots: dict[str, MarketDataPoint] = {}
@@ -111,22 +116,35 @@ class FredService:
             "limit": 10,
         }
 
-        try:
-            response = self.session.get(self.base_url, params=params, timeout=self.timeout_seconds)
-        except requests.Timeout as exc:
-            raise _FredServiceError(f"FRED timeout while fetching {series_config.display_name}.") from exc
-        except requests.RequestException as exc:
-            raise _FredServiceError(f"FRED network error while fetching {series_config.display_name}: {exc}") from exc
+        response: requests.Response | Any
+        for attempt in range(self.rate_limit_retries + 1):
+            try:
+                response = self.session.get(self.base_url, params=params, timeout=self.timeout_seconds)
+            except requests.Timeout as exc:
+                raise _FredServiceError(f"FRED timeout while fetching {series_config.display_name}.") from exc
+            except requests.RequestException as exc:
+                raise _FredServiceError(f"FRED network error while fetching {series_config.display_name}: {exc}") from exc
 
-        if response.status_code >= 500:
-            raise _FredServiceError(
-                f"FRED API unavailable while fetching {series_config.display_name} (HTTP {response.status_code})."
-            )
+            if response.status_code == 429:
+                if attempt >= self.rate_limit_retries:
+                    raise _FredServiceError(
+                        f"FRED API rate-limited {series_config.display_name} after {self.rate_limit_retries + 1} attempts (HTTP 429)."
+                    )
+                self.sleep_func(self._backoff_seconds(attempt))
+                continue
 
-        if response.status_code >= 400:
-            raise _FredServiceError(
-                f"FRED API rejected {series_config.display_name} (HTTP {response.status_code})."
-            )
+            if response.status_code >= 500:
+                raise _FredServiceError(
+                    f"FRED API unavailable while fetching {series_config.display_name} (HTTP {response.status_code})."
+                )
+
+            if response.status_code >= 400:
+                raise _FredServiceError(
+                    f"FRED API rejected {series_config.display_name} (HTTP {response.status_code})."
+                )
+            break
+        else:  # pragma: no cover - the loop always breaks or raises.
+            raise _FredServiceError(f"FRED API could not return data for {series_config.display_name}.")
 
         try:
             payload = response.json()
@@ -137,6 +155,10 @@ class FredService:
             raise _FredServiceError(f"FRED returned an invalid payload shape for {series_config.display_name}.")
 
         return payload
+
+    @staticmethod
+    def _backoff_seconds(attempt: int) -> float:
+        return 0.5 * (2**attempt)
 
     def _extract_recent_observations(
         self,

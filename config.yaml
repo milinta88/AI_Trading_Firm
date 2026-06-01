@@ -27,27 +27,28 @@ btc_derivatives:
 fred:
   base_url: https://api.stlouisfed.org/fred/series/observations
   timeout_seconds: 10
+  stale_after_days_by_series:
+    gold_us10y: 10
+    gold_real_yield: 10
+    gold_fed_funds: 75
+    gold_cpi: 75
   series:
     gold_us10y:
       series_id: DGS10
       data_type: us10y
       display_name: US10Y
-      stale_after_days: 10
     gold_real_yield:
       series_id: DFII10
       data_type: real_yield
       display_name: Real Yield
-      stale_after_days: 10
     gold_fed_funds:
       series_id: FEDFUNDS
       data_type: fed_funds
       display_name: Fed Funds
-      stale_after_days: 45
     gold_cpi:
       series_id: CPIAUCSL
       data_type: cpi
       display_name: CPI
-      stale_after_days: 45
 
 gold_spot_provider:
   enabled: true

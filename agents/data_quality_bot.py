@@ -16,8 +16,8 @@ class DataQualityBot:
         "btc_open_interest": 180,
         "gold_us10y": 60 * 24 * 10,
         "gold_real_yield": 60 * 24 * 10,
-        "gold_fed_funds": 60 * 24 * 45,
-        "gold_cpi": 60 * 24 * 45,
+        "gold_fed_funds": 60 * 24 * 75,
+        "gold_cpi": 60 * 24 * 75,
         "gold_dxy": 60 * 24 * 3,
         "gold_spot_price": 60 * 24 * 3,
     }
@@ -65,7 +65,7 @@ class DataQualityBot:
 
     def _derive_source_status(self, key: str, snapshot: MarketDataPoint, now: datetime) -> str:
         if snapshot.status == "OK":
-            threshold_minutes = self._STALE_THRESHOLDS_MINUTES.get(key)
+            threshold_minutes = self._threshold_minutes_for_snapshot(key=key, snapshot=snapshot)
             if threshold_minutes is None:
                 return "OK"
 
@@ -84,6 +84,17 @@ class DataQualityBot:
             return "STALE"
 
         return snapshot.status if snapshot.status == "FAIL" else "FAIL"
+
+    def _threshold_minutes_for_snapshot(self, key: str, snapshot: MarketDataPoint) -> int | None:
+        if snapshot.source == "FRED" and isinstance(snapshot.value, dict):
+            stale_after_days = snapshot.value.get("stale_after_days")
+            if stale_after_days not in {None, ""}:
+                try:
+                    return int(stale_after_days) * 24 * 60
+                except (TypeError, ValueError):
+                    return self._STALE_THRESHOLDS_MINUTES.get(key)
+
+        return self._STALE_THRESHOLDS_MINUTES.get(key)
 
     @staticmethod
     def _label_for_snapshot(snapshot: MarketDataPoint) -> str:
