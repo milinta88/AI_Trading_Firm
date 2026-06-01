@@ -49,6 +49,19 @@ fred:
       display_name: CPI
       stale_after_days: 45
 
+gold_spot_provider:
+  enabled: false
+  provider: gold_api
+  url: ""
+  api_key_env: GOLD_API_KEY
+  timeout_seconds: 10
+
+dxy_provider:
+  enabled: false
+  provider: yahoo_finance
+  symbol: DX-Y.NYB
+  timeout_seconds: 10
+
 risk:
   max_daily_loss_pct: 1.0
   max_weekly_loss_pct: 3.0

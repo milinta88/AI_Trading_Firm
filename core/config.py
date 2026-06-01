@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 ALLOWED_APP_MODES = {"research", "paper", "live", "live_micro"}
 ALLOWED_PAPER_SIGNAL_PROFILES = {"conservative", "balanced", "exploratory"}
 ALLOWED_CONFIDENCE_LEVELS = {"Low", "Medium", "High"}
+ALLOWED_GOLD_SPOT_PROVIDERS = {"gold_api"}
+ALLOWED_DXY_PROVIDERS = {"yahoo_finance"}
 RESEARCH_READINESS_STALE_KEYS = {
     "btc_price",
     "btc_derivatives",
@@ -145,6 +147,24 @@ class ResearchReadinessConfig:
 
 
 @dataclass(frozen=True)
+class GoldSpotProviderConfig:
+    enabled: bool
+    provider: str
+    url: str
+    api_key_env: str
+    api_key: str | None
+    timeout_seconds: int
+
+
+@dataclass(frozen=True)
+class DxyProviderConfig:
+    enabled: bool
+    provider: str
+    symbol: str
+    timeout_seconds: int
+
+
+@dataclass(frozen=True)
 class AppConfig:
     project_root: Path
     app_name: str
@@ -173,6 +193,8 @@ class AppConfig:
     paper_trading: PaperTradingConfig
     paper_signal: PaperSignalConfig
     research_readiness: ResearchReadinessConfig
+    gold_spot_provider: GoldSpotProviderConfig
+    dxy_provider: DxyProviderConfig
 
     @property
     def telegram_status(self) -> TelegramConfigStatus:
@@ -201,6 +223,8 @@ def load_config(project_root: Path) -> AppConfig:
     market_data_section = raw_config.get("market_data", {})
     btc_derivatives_section = raw_config.get("btc_derivatives", {})
     fred_section = raw_config.get("fred", {})
+    gold_spot_provider_section = raw_config.get("gold_spot_provider", {})
+    dxy_provider_section = raw_config.get("dxy_provider", {})
     risk_section = raw_config.get("risk", {})
     paper_trading_section = raw_config.get("paper_trading", {})
     paper_signal_section = raw_config.get("paper_signal", {})
@@ -246,6 +270,8 @@ def load_config(project_root: Path) -> AppConfig:
         paper_trading=_build_paper_trading_config(paper_trading_section),
         paper_signal=_build_paper_signal_config(paper_signal_section),
         research_readiness=_build_research_readiness_config(research_readiness_section),
+        gold_spot_provider=_build_gold_spot_provider_config(gold_spot_provider_section),
+        dxy_provider=_build_dxy_provider_config(dxy_provider_section),
     )
 
     validate_config(config)
@@ -393,6 +419,30 @@ def validate_config(config: AppConfig) -> None:
             continue
         if value <= 0:
             errors.append(f"research_readiness.stale_after_minutes.{key} must be greater than zero.")
+
+    if config.gold_spot_provider.provider not in ALLOWED_GOLD_SPOT_PROVIDERS:
+        errors.append(
+            "gold_spot_provider.provider must be one of: "
+            f"{', '.join(sorted(ALLOWED_GOLD_SPOT_PROVIDERS))}."
+        )
+
+    if config.gold_spot_provider.timeout_seconds <= 0:
+        errors.append("gold_spot_provider.timeout_seconds must be greater than zero.")
+
+    if not config.gold_spot_provider.api_key_env:
+        errors.append("gold_spot_provider.api_key_env is required.")
+
+    if config.dxy_provider.provider not in ALLOWED_DXY_PROVIDERS:
+        errors.append(
+            "dxy_provider.provider must be one of: "
+            f"{', '.join(sorted(ALLOWED_DXY_PROVIDERS))}."
+        )
+
+    if config.dxy_provider.timeout_seconds <= 0:
+        errors.append("dxy_provider.timeout_seconds must be greater than zero.")
+
+    if not config.dxy_provider.symbol:
+        errors.append("dxy_provider.symbol is required.")
 
     if errors:
         raise ConfigValidationError(" ".join(errors))
@@ -578,6 +628,29 @@ def _build_research_readiness_config(raw_config: object) -> ResearchReadinessCon
         min_snapshots_for_regime=int(section.get("min_snapshots_for_regime", 10)),
         stale_after_minutes=stale_after_minutes,
         min_readiness_score_for_decision=int(section.get("min_readiness_score_for_decision", 70)),
+    )
+
+
+def _build_gold_spot_provider_config(raw_config: object) -> GoldSpotProviderConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    api_key_env = str(section.get("api_key_env", "GOLD_API_KEY")).strip() or "GOLD_API_KEY"
+    return GoldSpotProviderConfig(
+        enabled=_as_bool(section.get("enabled", False)),
+        provider=str(section.get("provider", "gold_api")).strip().lower() or "gold_api",
+        url=str(section.get("url", "")).strip(),
+        api_key_env=api_key_env,
+        api_key=_clean_optional_text(os.getenv(api_key_env)),
+        timeout_seconds=int(section.get("timeout_seconds", 10)),
+    )
+
+
+def _build_dxy_provider_config(raw_config: object) -> DxyProviderConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    return DxyProviderConfig(
+        enabled=_as_bool(section.get("enabled", False)),
+        provider=str(section.get("provider", "yahoo_finance")).strip().lower() or "yahoo_finance",
+        symbol=str(section.get("symbol", "DX-Y.NYB")).strip() or "DX-Y.NYB",
+        timeout_seconds=int(section.get("timeout_seconds", 10)),
     )
 
 

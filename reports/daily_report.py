@@ -226,12 +226,12 @@ class DailyReportFormatter:
             return "NOT_AVAILABLE"
         if snapshot.status == "OK" and snapshot.value:
             latest_value = snapshot.value.get("latest_value")
-            observation_date = snapshot.value.get("observation_date")
-            return f"{latest_value} ({observation_date})"
+            timestamp_label = snapshot.value.get("observation_date") or snapshot.value.get("quote_timestamp")
+            return f"{latest_value} ({timestamp_label})"
         if snapshot.status == "STALE" and snapshot.value:
             latest_value = snapshot.value.get("latest_value")
-            observation_date = snapshot.value.get("observation_date")
-            return f"STALE {latest_value} ({observation_date})"
+            timestamp_label = snapshot.value.get("observation_date") or snapshot.value.get("quote_timestamp")
+            return f"STALE {latest_value} ({timestamp_label})"
         return snapshot.status
 
     @staticmethod

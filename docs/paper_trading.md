@@ -1,4 +1,4 @@
-# Phase 2.0 Through 2.4 Paper Trading
+# Phase 2.0 Through 2.4B Paper Trading
 
 Paper trading is simulated only. It does not send real orders, connect to MT5, call `order_send`, use exchange API keys, or touch private trading endpoints.
 
@@ -213,3 +213,11 @@ Phase 2.4 does not change simulated order logic. It adds a research-readiness la
 - Regime classification is read-only and asset-specific.
 - Readiness can mark an asset as not decision-ready because of missing data, stale data, or insufficient snapshot history.
 - These readiness summaries are for research quality control, not live execution.
+
+## Phase 2.4B Gold Research Inputs
+
+Phase 2.4B adds optional read-only Gold DXY and Gold spot inputs for research readiness and report quality only.
+
+- These providers can improve Gold completeness and readiness when configured.
+- They do not change paper-trading signal thresholds or simulated execution rules.
+- Public/provider data remains research-only and not broker-grade execution data.

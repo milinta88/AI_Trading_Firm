@@ -18,6 +18,8 @@ class DataQualityBot:
         "gold_real_yield": 60 * 24 * 10,
         "gold_fed_funds": 60 * 24 * 45,
         "gold_cpi": 60 * 24 * 45,
+        "gold_dxy": 60 * 24 * 3,
+        "gold_spot_price": 60 * 24 * 3,
     }
 
     def evaluate(

@@ -45,6 +45,44 @@ def test_load_config_enables_live_telegram_when_credentials_exist(tmp_path: Path
     assert runtime.allow_live_sends is True
 
 
+def test_load_config_reads_gold_spot_api_key_from_configured_env_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_config(tmp_path)
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "FRED_API_KEY=test-fred-key",
+                "CUSTOM_GOLD_KEY=test-gold-key",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.delenv("CUSTOM_GOLD_KEY", raising=False)
+
+    (tmp_path / "config.yaml").write_text(
+        (tmp_path / "config.yaml").read_text(encoding="utf-8") + "\n"
+        + "\n".join(
+            [
+                "gold_spot_provider:",
+                "  enabled: true",
+                "  provider: gold_api",
+                "  url: https://example.com/gold",
+                "  api_key_env: CUSTOM_GOLD_KEY",
+                "  timeout_seconds: 10",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.gold_spot_provider.api_key_env == "CUSTOM_GOLD_KEY"
+    assert config.gold_spot_provider.api_key == "test-gold-key"
+
+
 def test_load_config_rejects_trade_execution_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _write_config(tmp_path, execution_enabled=True)
     _clear_telegram_env(monkeypatch)

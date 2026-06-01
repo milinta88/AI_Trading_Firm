@@ -927,6 +927,16 @@ def _derive_system_health(connection: sqlite3.Connection) -> dict[str, str]:
                 str(market_status.get("Gold cpi", "NOT_CONFIGURED")),
             ]
         ),
+        "Gold macro data": _aggregate_status(
+            [
+                str(market_status.get("Gold us10y", "NOT_CONFIGURED")),
+                str(market_status.get("Gold real_yield", "NOT_CONFIGURED")),
+                str(market_status.get("Gold fed_funds", "NOT_CONFIGURED")),
+                str(market_status.get("Gold cpi", "NOT_CONFIGURED")),
+                str(market_status.get("Gold dxy", "NOT_CONFIGURED")),
+                str(market_status.get("Gold spot_price", "NOT_CONFIGURED")),
+            ]
+        ),
         "MT5": "NOT_CONFIGURED",
         "Exchange private API": "NOT_CONFIGURED",
     }

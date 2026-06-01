@@ -171,14 +171,22 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Dashboard Research Readiness tab with latest readiness cards and recent readiness history
 - No real trading, no live routing, no MT5, and no private exchange APIs
 
+### Phase 2.4B Gold Research Input Providers
+
+- Optional read-only `gold_spot_provider` config with environment-only API key loading
+- Optional read-only `dxy_provider` config for research monitoring
+- Gold spot and DXY snapshots persist into existing `market_snapshots`
+- Gold readiness can improve when DXY and Gold spot are configured and healthy
+- FRED setup now has clearer environment guidance and startup warnings when `FRED_API_KEY` is missing
+- No real trading, no live routing, no MT5, and no private exchange APIs
+
 ## Current Known Limitations
 
 - Gold macro FRED data depends on `FRED_API_KEY`; without it, FRED inputs stay `NOT_CONFIGURED`.
-- DXY is still `NOT_CONFIGURED`.
-- Gold spot price is still `NOT_CONFIGURED`.
+- DXY and Gold spot providers are optional, disabled by default, and remain `NOT_CONFIGURED` until explicitly configured.
 - BTC funding-rate and open-interest scoring remains intentionally simple and rule-based.
 - Multi-point trend logic is currently used for dashboard monitoring; scoring remains conservative and deterministic.
-- Gold readiness will remain constrained until DXY and gold spot research inputs are configured.
+- Gold readiness will remain constrained until DXY and Gold spot research inputs are configured and enough snapshot history exists.
 - Gold macro freshness can degrade quickly because CPI and Fed Funds are slower-moving series than BTC data.
 - Data hygiene checks identify issues but do not repair or compact data automatically.
 - Paper trading is simulated-only and disabled by default.

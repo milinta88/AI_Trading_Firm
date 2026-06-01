@@ -15,6 +15,7 @@ Phase 2.1 adds read-only paper trading review analytics, signal review summaries
 Phase 2.2 adds configurable paper signal tuning profiles and normalized signal-review analytics for clean accepted/rejected/no-trade reconciliation.
 Phase 2.3 adds paper trade journal notes and local CSV review exports for simulated-only review workflows.
 Phase 2.4 adds market regime classification, research readiness scoring, and explicit no-trade readiness reasons from persisted snapshots only.
+Phase 2.4B adds optional read-only Gold spot and DXY provider inputs plus clearer macro-provider setup guidance.
 
 This project still does not execute real trades. It does not route live orders, connect to MT5, or connect to private exchange APIs.
 
@@ -146,6 +147,15 @@ See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) f
 - Adds a dashboard Research Readiness tab plus concise readiness sections in the daily brief and `python main.py --paper-report`
 - Does not add new execution, broker connectivity, order routing, or strategy auto-ordering
 
+## Phase 2.4B Gold Research Input Providers
+
+- Adds optional read-only `gold_spot_provider` and `dxy_provider` config sections
+- Gold spot uses a configurable `gold_api`-style provider with the API key kept in the environment only
+- DXY uses a read-only Yahoo Finance quote path for research monitoring only
+- Both providers are disabled by default and return `NOT_CONFIGURED` until explicitly enabled
+- Daily brief, dashboard, and research readiness keep running safely if these providers are disabled, stale, or unavailable
+- These sources are research-only and not broker-grade execution data
+
 ## Windows Setup
 
 1. Open PowerShell in the project folder:
@@ -186,12 +196,38 @@ Then edit `.env` and add Telegram credentials only if you want live message deli
 TELEGRAM_BOT_TOKEN=123456:your_bot_token_here
 TELEGRAM_CHAT_ID=123456789
 FRED_API_KEY=your_fred_api_key_here
+GOLD_API_KEY=your_gold_spot_provider_key_here
 APP_MODE=research
 LOG_LEVEL=INFO
 ```
 
 If `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHAT_ID` is missing, the app automatically stays in `DRY_RUN` mode and logs the message locally instead of sending it.
-If `FRED_API_KEY` is missing, FRED macro sources stay `NOT_CONFIGURED` and the daily brief continues in research mode.
+If `FRED_API_KEY` is missing, FRED macro sources stay `NOT_CONFIGURED`, the app logs a startup warning, and the daily brief continues in research mode.
+If `GOLD_API_KEY` is missing, the optional Gold spot provider stays `NOT_CONFIGURED`.
+
+## Optional Gold Research Providers
+
+These providers are read-only and disabled by default.
+
+```yaml
+gold_spot_provider:
+  enabled: false
+  provider: gold_api
+  url: ""
+  api_key_env: GOLD_API_KEY
+  timeout_seconds: 10
+
+dxy_provider:
+  enabled: false
+  provider: yahoo_finance
+  symbol: DX-Y.NYB
+  timeout_seconds: 10
+```
+
+Notes:
+- `gold_spot_provider.url` is left blank by default so no third-party spot-price call is made until you explicitly configure one.
+- DXY via Yahoo Finance is for research monitoring only and may be delayed; it is not broker-grade execution data.
+- Enabling these providers does not enable trading, order routing, MT5, or private exchange APIs.
 
 ## Run The App
 
@@ -277,7 +313,9 @@ Phase 1.2 through Phase 1.9 use read-only endpoints and persisted snapshots only
 - Multi-point trend summaries are computed from persisted snapshots only.
 - BTC confidence can rise above `Medium` only when persisted open-interest trend logic is available and clean.
 - Gold macro inputs can use optional read-only FRED series.
-- DXY and Gold spot price remain `NOT_CONFIGURED` until a safe read-only source is added.
+- DXY can use an optional read-only Yahoo Finance quote path.
+- Gold spot can use an optional read-only Gold spot provider keyed only through environment variables.
+- DXY and Gold spot remain `NOT_CONFIGURED` until those optional providers are explicitly enabled and configured.
 
 If any external API fails, times out, returns invalid JSON, or becomes unavailable, the daily brief still completes and records the missing source as unavailable instead of crashing.
 

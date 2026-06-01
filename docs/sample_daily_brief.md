@@ -1,5 +1,7 @@
 # Sample Daily Brief
 
+This sample shows the report structure. When the optional read-only `dxy_provider` and `gold_spot_provider` are still disabled, the Gold DXY and spot lines remain `NOT_CONFIGURED`.
+
 ```text
 AI Trading Firm Daily Brief
 Date: 2026-05-28

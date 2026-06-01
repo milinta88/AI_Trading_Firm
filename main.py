@@ -23,7 +23,9 @@ from paper_trading.paper_orchestrator import build_paper_trading_orchestrator
 from paper_trading.repository import PaperTradingRepository
 from reports.daily_report import DailyReportFormatter
 from reports.paper_report import PaperTradingReportFormatter
+from services.dxy_service import DxyService
 from services.fred_service import FredService
+from services.gold_spot_service import GoldSpotService
 from services.market_data_service import MarketDataService
 from services.telegram_service import TelegramService
 
@@ -80,6 +82,8 @@ def build_orchestrator(config: AppConfig, telegram_runtime: TelegramRuntimeSetti
         timeout_seconds=config.fred_timeout_seconds,
         series_configs=config.fred_series,
     )
+    gold_spot_service = GoldSpotService(config.gold_spot_provider)
+    dxy_service = DxyService(config.dxy_provider)
     market_data_service = MarketDataService(
         timeout_seconds=config.market_data_timeout_seconds,
         btc_public_price_url=config.btc_public_price_url,
@@ -88,6 +92,8 @@ def build_orchestrator(config: AppConfig, telegram_runtime: TelegramRuntimeSetti
         btc_funding_rate_url=config.btc_funding_rate_url,
         btc_open_interest_url=config.btc_open_interest_url,
         fred_service=fred_service,
+        gold_spot_service=gold_spot_service,
+        dxy_service=dxy_service,
     )
     telegram_service = TelegramService(
         bot_token=config.telegram_bot_token,
@@ -136,6 +142,24 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     logger = logging.getLogger(__name__)
+    fred_series = getattr(config, "fred_series", {})
+    fred_api_key = getattr(config, "fred_api_key", None)
+    gold_spot_provider = getattr(config, "gold_spot_provider", None)
+
+    if fred_series and not fred_api_key:
+        logger.warning(
+            "FRED_API_KEY is missing. Gold FRED macro inputs will remain NOT_CONFIGURED until the key is added to the environment."
+        )
+    if (
+        gold_spot_provider is not None
+        and getattr(gold_spot_provider, "enabled", False)
+        and not getattr(gold_spot_provider, "api_key", None)
+    ):
+        logger.warning(
+            "%s is missing. Gold spot provider '%s' will remain NOT_CONFIGURED until the key is added to the environment.",
+            getattr(gold_spot_provider, "api_key_env", "GOLD_API_KEY"),
+            getattr(gold_spot_provider, "provider", "gold_api"),
+        )
     if args.paper_report:
         logger.info("Loading local paper trading analytics report.")
         try:

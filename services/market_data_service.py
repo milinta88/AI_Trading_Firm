@@ -7,7 +7,9 @@ from typing import Any
 import requests
 
 from core.models import MarketDataPoint
+from services.dxy_service import DxyService
 from services.fred_service import FredService
+from services.gold_spot_service import GoldSpotService
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,8 @@ class MarketDataService:
         btc_funding_rate_url: str,
         btc_open_interest_url: str,
         fred_service: FredService | None = None,
+        gold_spot_service: GoldSpotService | None = None,
+        dxy_service: DxyService | None = None,
         session: requests.Session | None = None,
     ) -> None:
         self.timeout_seconds = timeout_seconds
@@ -33,6 +37,8 @@ class MarketDataService:
         self.btc_funding_rate_url = btc_funding_rate_url
         self.btc_open_interest_url = btc_open_interest_url
         self.fred_service = fred_service
+        self.gold_spot_service = gold_spot_service
+        self.dxy_service = dxy_service
         self.session = session or requests.Session()
 
     def collect_market_data(self) -> dict[str, MarketDataPoint]:
@@ -83,19 +89,27 @@ class MarketDataService:
             }
         )
 
-        fred_snapshots["gold_dxy"] = self.build_placeholder(
-            key="gold_dxy",
-            asset="Gold",
-            source="Macro Placeholder",
-            data_type="dxy",
-            message="DXY live macro data is not configured yet.",
+        fred_snapshots["gold_dxy"] = (
+            self.dxy_service.fetch_latest_quote()
+            if self.dxy_service is not None
+            else self.build_placeholder(
+                key="gold_dxy",
+                asset="Gold",
+                source="Macro Placeholder",
+                data_type="dxy",
+                message="DXY live macro data is not configured yet.",
+            )
         )
-        fred_snapshots["gold_spot_price"] = self.build_placeholder(
-            key="gold_spot_price",
-            asset="Gold",
-            source="Spot Gold Placeholder",
-            data_type="spot_price",
-            message="Gold spot price integration is not configured yet.",
+        fred_snapshots["gold_spot_price"] = (
+            self.gold_spot_service.fetch_latest_price()
+            if self.gold_spot_service is not None
+            else self.build_placeholder(
+                key="gold_spot_price",
+                asset="Gold",
+                source="Spot Gold Placeholder",
+                data_type="spot_price",
+                message="Gold spot price integration is not configured yet.",
+            )
         )
 
         return fred_snapshots
