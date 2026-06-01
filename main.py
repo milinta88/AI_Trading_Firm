@@ -17,6 +17,7 @@ from core.logging_config import setup_logging
 from database.init_db import initialize_database
 from database.repository import WorkflowRepository
 from paper_trading.analytics import PaperAnalytics
+from paper_trading.export_service import PaperTradingExportService
 from paper_trading.paper_orchestrator import build_paper_trading_orchestrator
 from paper_trading.repository import PaperTradingRepository
 from reports.daily_report import DailyReportFormatter
@@ -53,6 +54,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--paper-report",
         action="store_true",
         help="Print the latest local paper trading analytics summary without running any workflow or simulation.",
+    )
+    parser.add_argument(
+        "--paper-export",
+        action="store_true",
+        help="Export local paper review CSV files to data/exports without running any workflow or simulation.",
     )
     return parser.parse_args(argv)
 
@@ -133,6 +139,15 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             logger.exception("Paper trading report failed.")
             return 1
+    if args.paper_export:
+        logger.info("Exporting local paper review CSV files.")
+        try:
+            for export_path in export_paper_review_files(config, project_root):
+                print(export_path)
+            return 0
+        except Exception:
+            logger.exception("Paper trading review export failed.")
+            return 1
 
     workflow_label = "Telegram test" if runtime_options.test_telegram else "daily brief"
     logger.info("Starting %s %s workflow in %s mode.", config.app_name, workflow_label, config.mode)
@@ -185,6 +200,18 @@ def build_paper_report(config: AppConfig) -> str:
     ).build_report()
     formatter = PaperTradingReportFormatter()
     return formatter.format(analytics, paper_signal_summary=asdict(config.paper_signal))
+
+
+def export_paper_review_files(config: AppConfig, project_root: Path) -> list[Path]:
+    export_service = PaperTradingExportService(
+        database_path=config.database_path,
+        starting_equity=config.paper_trading.starting_equity,
+    )
+    export_dir = project_root / "data" / "exports"
+    return [
+        artifact.path
+        for artifact in export_service.write_review_exports(export_dir)
+    ]
 
 
 if __name__ == "__main__":

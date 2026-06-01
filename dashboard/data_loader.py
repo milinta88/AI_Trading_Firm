@@ -22,6 +22,7 @@ from paper_trading.analytics import PaperAnalytics
 class DashboardData:
     database_available: bool
     database_message: str
+    database_path: Path | None
     app_mode: str
     execution_enabled: bool
     paper_trading_enabled: bool
@@ -62,6 +63,7 @@ class DashboardData:
     paper_rejection_reasons: list[dict[str, Any]]
     paper_no_trade_reasons: list[dict[str, Any]]
     paper_recent_signal_reviews: list[dict[str, Any]]
+    paper_journal_notes: list[dict[str, Any]]
     paper_signal_config: dict[str, Any] | None = field(
         default_factory=lambda: _default_paper_signal_config("conservative")
     )
@@ -99,6 +101,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             return DashboardData(
                 database_available=True,
                 database_message=f"Connected read-only to {database_path}.",
+                database_path=database_path,
                 app_mode=app_mode,
                 execution_enabled=execution_enabled,
                 paper_trading_enabled=paper_trading_enabled,
@@ -140,6 +143,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 paper_rejection_reasons=paper_report["rejection_reasons"],
                 paper_no_trade_reasons=paper_report["no_trade_reasons"],
                 paper_recent_signal_reviews=paper_report["recent_signal_reviews"],
+                paper_journal_notes=_fetch_recent_paper_journal_notes(connection, limit),
             )
     except sqlite3.Error as exc:
         return _empty_dashboard_data(
@@ -326,6 +330,7 @@ def _empty_dashboard_data(
     return DashboardData(
         database_available=False,
         database_message=message,
+        database_path=None,
         app_mode=app_mode,
         execution_enabled=execution_enabled,
         paper_trading_enabled=paper_trading_enabled,
@@ -408,6 +413,7 @@ def _empty_dashboard_data(
         paper_rejection_reasons=[],
         paper_no_trade_reasons=[],
         paper_recent_signal_reviews=[],
+        paper_journal_notes=[],
     )
 
 
@@ -718,6 +724,21 @@ def _fetch_recent_paper_run_summaries(connection: sqlite3.Connection, limit: int
     for row in rows:
         row["notes"] = parse_json_value(row.get("notes_json"), fallback=[])
     return rows
+
+
+def _fetch_recent_paper_journal_notes(connection: sqlite3.Connection, limit: int) -> list[dict[str, Any]]:
+    if not _table_exists(connection, "paper_journal_notes"):
+        return []
+    return _fetch_all(
+        connection,
+        """
+        SELECT * FROM paper_journal_notes
+        WHERE is_deleted = 0
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
 
 
 def _derive_system_health(connection: sqlite3.Connection) -> dict[str, str]:

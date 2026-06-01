@@ -152,6 +152,15 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Dashboard and `python main.py --paper-report` show signal tuning, no-trade reasons, and normalized review notes
 - No real trading, no live routing, no MT5, and no private exchange APIs
 
+### Phase 2.3 Paper Trade Journal And Review Export
+
+- Local `paper_journal_notes` table for simulated-only review notes
+- Read-only CSV export helpers for paper signal reviews, paper run summaries, closed simulated positions, and paper performance summaries
+- `python main.py --paper-export` for local review CSV generation into `data/exports`
+- Dashboard Paper Trading tab download buttons for review CSVs
+- Dashboard Paper Trading tab journal form and recent-note review table
+- No real trading, no live routing, no MT5, and no private exchange APIs
+
 ## Current Known Limitations
 
 - Gold macro FRED data depends on `FRED_API_KEY`; without it, FRED inputs stay `NOT_CONFIGURED`.
@@ -175,11 +184,11 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Keep scoring changes conservative until enough snapshot history exists.
 - Consider explicit retention tooling only after approval, with backups and audit logs.
 
-### Phase 2.3
+### Phase 2.4
 
 - Consider richer paper position lifecycle rules after more snapshot history exists.
-- Add optional paper-trade journaling and review exports without changing simulated-only safety rules.
 - Consider paper performance slicing by regime, profile, or signal family using persisted local data only.
+- Consider read-only review tagging/filtering refinements for journal notes and exports if usage grows.
 
 ### Phase 3.0
 
@@ -192,6 +201,8 @@ Build a research-first AI trading workflow for Gold and BTC.
 - `python main.py --send-telegram`
 - `python main.py --test-telegram`
 - `python main.py --paper-run`
+- `python main.py --paper-report`
+- `python main.py --paper-export`
 - `streamlit run dashboard/app.py`
 - `python -m compileall .`
 - `pytest`

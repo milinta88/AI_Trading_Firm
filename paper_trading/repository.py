@@ -9,6 +9,8 @@ from typing import Any
 
 from paper_trading.models import PaperOrder, PaperPosition, PaperRunSummary, PaperSignalReview
 
+_UNSET = object()
+
 
 class PaperTradingRepository:
     """SQLite persistence for simulated-only paper trading state."""
@@ -175,6 +177,22 @@ class PaperTradingRepository:
                 ORDER BY id ASC
                 """,
                 (workflow_run_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_journal_notes(self, limit: int = 100, include_deleted: bool = False) -> list[dict[str, Any]]:
+        with closing(self._connect()) as connection, connection:
+            if not _table_exists(connection, "paper_journal_notes"):
+                return []
+            predicate = "" if include_deleted else "WHERE is_deleted = 0"
+            rows = connection.execute(
+                f"""
+                SELECT * FROM paper_journal_notes
+                {predicate}
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -469,6 +487,108 @@ class PaperTradingRepository:
                 ),
             )
             return int(cursor.lastrowid)
+
+    def add_journal_note(
+        self,
+        *,
+        note_type: str,
+        note_text: str,
+        reference_id: str | None = None,
+        asset: str | None = None,
+        profile: str | None = None,
+        title: str | None = None,
+        tags: str | None = None,
+    ) -> int:
+        with closing(self._connect()) as connection, connection:
+            if not _table_exists(connection, "paper_journal_notes"):
+                return 0
+            cursor = connection.execute(
+                """
+                INSERT INTO paper_journal_notes (
+                    note_type,
+                    reference_id,
+                    asset,
+                    profile,
+                    title,
+                    note_text,
+                    tags
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    note_type,
+                    reference_id,
+                    asset,
+                    profile,
+                    title,
+                    note_text,
+                    tags,
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def update_journal_note(
+        self,
+        note_id: int,
+        *,
+        note_type: object = _UNSET,
+        reference_id: object = _UNSET,
+        asset: object = _UNSET,
+        profile: object = _UNSET,
+        title: object = _UNSET,
+        note_text: object = _UNSET,
+        tags: object = _UNSET,
+    ) -> bool:
+        with closing(self._connect()) as connection, connection:
+            if not _table_exists(connection, "paper_journal_notes"):
+                return False
+
+            assignments: list[str] = []
+            values: list[Any] = []
+            for column_name, value in (
+                ("note_type", note_type),
+                ("reference_id", reference_id),
+                ("asset", asset),
+                ("profile", profile),
+                ("title", title),
+                ("note_text", note_text),
+                ("tags", tags),
+            ):
+                if value is _UNSET:
+                    continue
+                assignments.append(f"{column_name} = ?")
+                values.append(value)
+
+            if not assignments:
+                return False
+
+            assignments.append("updated_at = ?")
+            values.append(datetime.now(UTC).isoformat())
+            values.append(note_id)
+            cursor = connection.execute(
+                f"""
+                UPDATE paper_journal_notes
+                SET {", ".join(assignments)}
+                WHERE id = ?
+                """,
+                tuple(values),
+            )
+            return cursor.rowcount > 0
+
+    def soft_delete_journal_note(self, note_id: int) -> bool:
+        with closing(self._connect()) as connection, connection:
+            if not _table_exists(connection, "paper_journal_notes"):
+                return False
+            cursor = connection.execute(
+                """
+                UPDATE paper_journal_notes
+                SET is_deleted = 1,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (datetime.now(UTC).isoformat(), note_id),
+            )
+            return cursor.rowcount > 0
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)

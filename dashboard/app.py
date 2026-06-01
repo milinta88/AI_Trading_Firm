@@ -6,7 +6,10 @@ from typing import Any
 
 import streamlit as st
 
+from database.init_db import initialize_database
 from dashboard.data_loader import DashboardData, filter_rows, load_dashboard_data, rows_to_csv
+from paper_trading.export_service import PaperTradingExportService
+from paper_trading.repository import PaperTradingRepository
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -666,6 +669,9 @@ def _render_paper_trading(data: DashboardData) -> None:
         empty_message="No normalized paper signal reviews match the selected filters.",
     )
 
+    _render_paper_review_exports(data)
+    _render_paper_journal(data)
+
     st.markdown("#### Open Simulated Positions")
     _render_table(
         _paper_position_rows(data.paper_open_positions),
@@ -696,6 +702,101 @@ def _render_paper_trading(data: DashboardData) -> None:
     _render_table(
         _paper_run_summary_rows(data.paper_recent_run_summaries),
         empty_message="No paper run summaries are available yet.",
+    )
+
+
+def _render_paper_review_exports(data: DashboardData) -> None:
+    st.markdown("#### Paper Review Exports")
+    st.caption("Read-only CSV exports from local SQLite paper-review data only.")
+
+    if not data.database_path:
+        st.info("Paper review exports require a local SQLite database.")
+        return
+
+    export_service = PaperTradingExportService(
+        database_path=data.database_path,
+        starting_equity=data.paper_trading_starting_equity,
+    )
+    col_reviews, col_runs, col_closed = st.columns(3)
+    col_reviews.download_button(
+        label="Download signal reviews CSV",
+        data=export_service.export_signal_reviews_csv(),
+        file_name="paper_signal_reviews.csv",
+        mime="text/csv",
+    )
+    col_runs.download_button(
+        label="Download paper run summaries CSV",
+        data=export_service.export_run_summaries_csv(),
+        file_name="paper_run_summaries.csv",
+        mime="text/csv",
+    )
+    if data.paper_closed_positions:
+        col_closed.download_button(
+            label="Download closed paper trades CSV",
+            data=export_service.export_closed_positions_csv(),
+            file_name="paper_closed_positions.csv",
+            mime="text/csv",
+        )
+    else:
+        col_closed.caption("No closed simulated positions are available for CSV export yet.")
+
+
+def _render_paper_journal(data: DashboardData) -> None:
+    st.markdown("#### Paper Trade Journal")
+    st.caption("Local review notes only. Adding a note does not change simulated orders, positions, or thresholds.")
+
+    if data.database_path:
+        with st.form("paper_journal_note_form", clear_on_submit=True):
+            note_type = st.selectbox(
+                "Note Type",
+                ["GENERAL", "RUN", "SIGNAL_REVIEW", "TRADE"],
+                key="paper_journal_note_type",
+            )
+            title = st.text_input("Title (optional)", key="paper_journal_title")
+            reference_col, asset_col, profile_col = st.columns(3)
+            reference_id = reference_col.text_input("Reference ID (optional)", key="paper_journal_reference_id")
+            asset = asset_col.selectbox("Asset (optional)", ["", "BTC", "Gold"], key="paper_journal_asset")
+            profile_options = _paper_profile_options(data)
+            profile = profile_col.selectbox(
+                "Profile (optional)",
+                ["", *profile_options],
+                key="paper_journal_profile",
+            )
+            tags = st.text_input("Tags (optional, comma-separated)", key="paper_journal_tags")
+            note_text = st.text_area("New Journal Note", height=140, key="paper_journal_text")
+            submitted = st.form_submit_button("Add Note")
+
+        if submitted:
+            if not note_text.strip():
+                st.warning("Enter a journal note before saving it.")
+            else:
+                try:
+                    initialize_database(data.database_path)
+                    repository = PaperTradingRepository(data.database_path)
+                    note_id = repository.add_journal_note(
+                        note_type=note_type,
+                        reference_id=_optional_text(reference_id),
+                        asset=_optional_text(asset),
+                        profile=_optional_text(profile),
+                        title=_optional_text(title),
+                        note_text=note_text.strip(),
+                        tags=_optional_text(tags),
+                    )
+                except Exception:
+                    st.error("Unable to save the journal note right now.")
+                else:
+                    if note_id:
+                        st.success(f"Saved journal note #{note_id}.")
+                        st.rerun()
+                    else:
+                        st.warning("The journal table is not available yet. Run a local workflow first and try again.")
+    else:
+        st.info("Paper journal notes require a local SQLite database.")
+
+    st.markdown("#### Recent Journal Notes")
+    _render_table(
+        _paper_journal_rows(data.paper_journal_notes),
+        empty_message="No paper journal notes are available yet.",
     )
 
 
@@ -825,6 +926,24 @@ def _paper_signal_review_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
     ]
 
 
+def _paper_journal_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": row.get("id"),
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+            "note_type": row.get("note_type"),
+            "reference_id": row.get("reference_id"),
+            "asset": row.get("asset"),
+            "profile": row.get("profile"),
+            "title": row.get("title"),
+            "note_text": row.get("note_text"),
+            "tags": row.get("tags"),
+        }
+        for row in rows
+    ]
+
+
 def _review_reason_strings(reasons: list[dict[str, Any]]) -> list[str]:
     rendered: list[str] = []
     for reason in reasons:
@@ -861,6 +980,29 @@ def _format_metric(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.2f}"
     return str(value)
+
+
+def _optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _paper_profile_options(data: DashboardData) -> list[str]:
+    options = {
+        "conservative",
+        "balanced",
+        "exploratory",
+    }
+    current_profile = str((data.paper_signal_config or {}).get("profile") or "").strip()
+    if current_profile:
+        options.add(current_profile)
+    for row in data.paper_recent_signal_reviews:
+        profile = str(row.get("active_profile") or "").strip()
+        if profile:
+            options.add(profile)
+    return sorted(options)
 
 
 def _render_market_charts(chart_rows: list[dict[str, Any]]) -> None:

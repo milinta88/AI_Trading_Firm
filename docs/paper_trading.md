@@ -1,4 +1,4 @@
-# Phase 2.0 Through 2.2 Paper Trading
+# Phase 2.0 Through 2.3 Paper Trading
 
 Paper trading is simulated only. It does not send real orders, connect to MT5, call `order_send`, use exchange API keys, or touch private trading endpoints.
 
@@ -72,7 +72,7 @@ Open the Paper Trading tab to review:
 - Paper risk events and rejections
 - Paper equity curve
 
-The dashboard is read-only and monitoring-only.
+The dashboard is monitoring-only for paper trading state. Phase 2.3 journal notes add local review metadata only.
 
 ## Phase 2.1 Review Analytics
 
@@ -158,4 +158,49 @@ Phase 2.1 and 2.2 expand the Paper Trading tab with:
 - P&L by asset chart
 - Recent persisted paper run summaries
 
-All dashboard views remain read-only and monitoring-only.
+All dashboard views remain monitoring-only for paper trading state; journal notes remain local review metadata only.
+
+## Phase 2.3 Paper Trade Journal And Review Export
+
+Phase 2.3 adds lightweight review tooling without changing paper-trading decision logic.
+
+- `paper_trading/export_service.py` creates safe local CSV exports from SQLite only.
+- Export targets include `paper_signal_reviews`, `paper_run_summaries`, closed simulated positions, and paper performance summaries.
+- `python main.py --paper-export` writes timestamped `paper_signal_reviews_*.csv` and `paper_run_summaries_*.csv` files into `data/exports`.
+- Dashboard download buttons expose paper signal reviews, paper run summaries, and closed simulated trades when available.
+
+## Paper Journal Notes
+
+Journal notes are local review metadata only. They do not change simulated orders, positions, scores, thresholds, or risk decisions.
+
+The `paper_journal_notes` table stores:
+
+- `note_type`
+- `reference_id`
+- `asset`
+- `profile`
+- `title`
+- `note_text`
+- `tags`
+- `created_at`
+- `updated_at`
+- `is_deleted`
+
+Supported note types include:
+
+- `GENERAL`
+- `RUN`
+- `SIGNAL_REVIEW`
+- `TRADE`
+
+Repository helpers support insert, list, update, and soft-delete operations for local review workflows only.
+
+## Dashboard Review Tools
+
+The Paper Trading tab now includes:
+
+- Review CSV download buttons
+- A lightweight paper journal note form
+- A recent journal-notes table
+
+These tools are for simulated-only review and audit support. They do not enable real trading, order routing, broker connectivity, MT5, or private exchange APIs.

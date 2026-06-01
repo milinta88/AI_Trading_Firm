@@ -118,6 +118,21 @@ class PaperSignalReview:
 
 
 @dataclass(frozen=True)
+class PaperJournalNote:
+    note_type: str
+    note_text: str
+    reference_id: str | None = None
+    asset: str | None = None
+    profile: str | None = None
+    title: str | None = None
+    tags: str | None = None
+    is_deleted: bool = False
+    id: int | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+@dataclass(frozen=True)
 class PaperRunSummary:
     enabled: bool
     status: str

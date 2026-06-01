@@ -207,6 +207,20 @@ CREATE TABLE IF NOT EXISTS paper_run_summaries (
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs (id),
     FOREIGN KEY (equity_snapshot_id) REFERENCES paper_equity_curve (id)
 );
+
+CREATE TABLE IF NOT EXISTS paper_journal_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT,
+    note_type TEXT NOT NULL,
+    reference_id TEXT,
+    asset TEXT,
+    profile TEXT,
+    title TEXT,
+    note_text TEXT NOT NULL,
+    tags TEXT,
+    is_deleted INTEGER NOT NULL DEFAULT 0
+);
 """
 
 

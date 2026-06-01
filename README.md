@@ -13,6 +13,7 @@ Phase 1.9 adds report archive search, review tools, and read-only data hygiene c
 Phase 2.0 adds a simulated-only paper trading engine with local SQLite orders, positions, trades, equity, and risk events.
 Phase 2.1 adds read-only paper trading review analytics, signal review summaries, run summaries, and local text reporting.
 Phase 2.2 adds configurable paper signal tuning profiles and normalized signal-review analytics for clean accepted/rejected/no-trade reconciliation.
+Phase 2.3 adds paper trade journal notes and local CSV review exports for simulated-only review workflows.
 
 This project still does not execute real trades. It does not route live orders, connect to MT5, or connect to private exchange APIs.
 
@@ -127,6 +128,14 @@ See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) f
 - Dashboard and `python main.py --paper-report` now show active profile, tuning summary, no-trade reasons, and normalized review notes
 - Legacy `paper_risk_events` remain available for audit, but normalized review analytics avoid double-counting them
 
+## Phase 2.3 Paper Trade Journal And Review Export
+
+- Adds a simulated-only paper trade journal stored locally in SQLite
+- Adds safe CSV export helpers for `paper_signal_reviews`, `paper_run_summaries`, closed simulated positions, and paper performance summaries
+- Adds `python main.py --paper-export` to write local review CSVs into `data/exports`
+- Adds dashboard download buttons for paper signal reviews, run summaries, and closed simulated trades when available
+- Keeps exports local, read-only with respect to trading logic, and free of secrets
+
 ## Windows Setup
 
 1. Open PowerShell in the project folder:
@@ -212,6 +221,12 @@ Read-only paper analytics report:
 python main.py --paper-report
 ```
 
+Paper review export:
+
+```powershell
+python main.py --paper-export
+```
+
 Read-only dashboard:
 
 ```powershell
@@ -238,6 +253,7 @@ python main.py --dry-run
 - `python main.py --test-telegram` sends a short test message only. If credentials are missing, it stays in `DRY_RUN` and does not crash.
 - `python main.py --paper-run` runs the normal daily brief first, then runs the paper trading orchestrator only when `paper_trading.enabled` is `true`.
 - `python main.py --paper-report` prints a local text-only paper trading review report from SQLite and does not run the workflow or simulation.
+- `python main.py --paper-export` writes local paper review CSV files into `data/exports` and does not run the workflow or simulation.
 
 ## Read-Only Market Data
 
@@ -265,9 +281,10 @@ streamlit run dashboard/app.py
 
 You can also use [run_dashboard.bat](<C:/Users/saroj/Documents/New project/AI_Trading_Firm/run_dashboard.bat>) on Windows. Run `python main.py --dry-run` first if the database has not been created yet.
 
-Dashboard Phase 1.8 features include native Streamlit charts, date/asset/data-type filters, row-limit controls, multi-point trend context, and CSV exports for recent market and score snapshots. Phase 1.9 adds report archive search and data hygiene tabs. The dashboard does not mutate the database or trading state.
+Dashboard Phase 1.8 features include native Streamlit charts, date/asset/data-type filters, row-limit controls, multi-point trend context, and CSV exports for recent market and score snapshots. Phase 1.9 adds report archive search and data hygiene tabs. Trading and workflow state remain read-only in the dashboard; Phase 2.3 adds local journal-note review metadata only.
 Phase 2.0 adds a Paper Trading tab for simulated-only local orders, open positions, risk events, and paper equity curve. Phase 2.1 expands that tab with paper performance metrics, signal review summaries, rejection charts, closed-position review, and persisted paper run summaries.
 Phase 2.2 adds profile-aware paper signal tuning, normalized signal-review tables, no-trade reason charts, and profile/status filters for recent review rows.
+Phase 2.3 adds local paper-review CSV downloads plus a lightweight journal form and recent-notes table for simulated-only review notes.
 
 See [docs/paper_trading.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/docs/paper_trading.md>) for the paper trading design and safety rules.
 
@@ -307,6 +324,8 @@ python main.py --send-telegram
 - Market data snapshots are stored in SQLite.
 - Score snapshots are stored in SQLite.
 - Paper trading records are simulated-only and stored locally in SQLite.
+- Paper review exports are written locally to `data/exports`.
+- Paper journal notes are stored locally in SQLite for review only.
 - The app never prints Telegram secrets.
 - `risk.execution_enabled` must remain `false`.
 - This repository is still research/reporting only.
