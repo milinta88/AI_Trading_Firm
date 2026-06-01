@@ -39,7 +39,7 @@ class FakeSession:
 
 def test_gold_spot_service_returns_not_configured_when_disabled() -> None:
     service = GoldSpotService(
-        config=_config(enabled=False, api_key=None, url="https://example.com/gold"),
+        config=_config(enabled=False, api_key=None, url="https://www.goldapi.io/api/XAU/USD"),
         session=FakeSession(FakeResponse(200, {})),
     )
 
@@ -51,7 +51,7 @@ def test_gold_spot_service_returns_not_configured_when_disabled() -> None:
 
 def test_gold_spot_service_returns_not_configured_without_api_key() -> None:
     service = GoldSpotService(
-        config=_config(enabled=True, api_key=None, url="https://example.com/gold"),
+        config=_config(enabled=True, api_key=None, url="https://www.goldapi.io/api/XAU/USD"),
         session=FakeSession(FakeResponse(200, {})),
     )
 
@@ -64,7 +64,7 @@ def test_gold_spot_service_returns_not_configured_without_api_key() -> None:
 def test_gold_spot_service_ok_snapshot_can_be_persisted(tmp_path: Path) -> None:
     quote_time = int(datetime.now(UTC).timestamp())
     service = GoldSpotService(
-        config=_config(enabled=True, api_key="gold-secret", url="https://example.com/gold"),
+        config=_config(enabled=True, api_key="gold-secret", url="https://www.goldapi.io/api/XAU/USD"),
         session=FakeSession(
             FakeResponse(
                 200,
@@ -104,7 +104,7 @@ def test_gold_spot_service_ok_snapshot_can_be_persisted(tmp_path: Path) -> None:
 
     assert row is not None
     assert row[0] == "Gold"
-    assert row[1] == "gold_api"
+    assert row[1] == "GoldAPI.io"
     assert row[2] == "spot_price"
     assert row[3] == "OK"
     assert json.loads(str(row[4]))["latest_value"] == 2325.45
@@ -113,7 +113,7 @@ def test_gold_spot_service_ok_snapshot_can_be_persisted(tmp_path: Path) -> None:
 def test_gold_spot_service_failure_does_not_leak_api_key() -> None:
     secret = "super-secret-key"
     service = GoldSpotService(
-        config=_config(enabled=True, api_key=secret, url="https://example.com/gold"),
+        config=_config(enabled=True, api_key=secret, url="https://www.goldapi.io/api/XAU/USD"),
         session=FakeSession(requests.RequestException("provider unavailable")),
     )
 
@@ -126,7 +126,7 @@ def test_gold_spot_service_failure_does_not_leak_api_key() -> None:
 def _config(enabled: bool, api_key: str | None, url: str) -> GoldSpotProviderConfig:
     return GoldSpotProviderConfig(
         enabled=enabled,
-        provider="gold_api",
+        provider="goldapi_io",
         url=url,
         api_key_env="GOLD_API_KEY",
         api_key=api_key,

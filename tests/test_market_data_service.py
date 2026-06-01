@@ -117,7 +117,7 @@ def test_collect_market_data_keeps_running_when_gold_providers_fail() -> None:
         gold_spot_service=GoldSpotService(
             config=GoldSpotProviderConfig(
                 enabled=True,
-                provider="gold_api",
+                provider="goldapi_io",
                 url="https://example.com/gold",
                 api_key_env="GOLD_API_KEY",
                 api_key="test-key",

@@ -13,6 +13,9 @@ class GoldSpotService:
     """Read-only Gold spot provider wrapper for research workflows."""
 
     STALE_AFTER_HOURS = 24
+    _SUPPORTED_PROVIDERS = {"goldapi_io", "gold_api"}
+    _DEFAULT_GOLDAPI_URL = "https://www.goldapi.io/api/XAU/USD"
+    _SOURCE_LABEL = "GoldAPI.io"
 
     def __init__(
         self,
@@ -31,16 +34,10 @@ class GoldSpotService:
                 message="Gold spot provider is disabled in config.",
             )
 
-        if self.config.provider != "gold_api":
+        if self.config.provider not in self._SUPPORTED_PROVIDERS:
             return self._build_not_configured(
                 timestamp=fetched_at,
                 message=f"Gold spot provider '{self.config.provider}' is not supported yet.",
-            )
-
-        if not self.config.url:
-            return self._build_not_configured(
-                timestamp=fetched_at,
-                message="Gold spot provider URL is blank, so Gold spot remains read-only but unconfigured.",
             )
 
         if not self.config.api_key:
@@ -71,12 +68,12 @@ class GoldSpotService:
             return MarketDataPoint(
                 key="gold_spot_price",
                 asset="Gold",
-                source=self.config.provider,
+                source=self._SOURCE_LABEL,
                 data_type="spot_price",
                 status=status,
                 timestamp=quote_time,
                 value={
-                    "provider": self.config.provider,
+                    "provider": "goldapi_io",
                     "latest_value": price,
                     "previous_value": previous_value,
                     "change": change,
@@ -99,6 +96,7 @@ class GoldSpotService:
             )
 
     def _get_json(self) -> dict[str, Any]:
+        request_url = self.config.url or self._DEFAULT_GOLDAPI_URL
         headers = {
             "x-access-token": self.config.api_key or "",
             "Content-Type": "application/json",
@@ -106,7 +104,7 @@ class GoldSpotService:
         }
         try:
             response = self.session.get(
-                self.config.url,
+                request_url,
                 headers=headers,
                 timeout=self.config.timeout_seconds,
             )
@@ -139,11 +137,11 @@ class GoldSpotService:
         return MarketDataPoint(
             key="gold_spot_price",
             asset="Gold",
-            source=self.config.provider,
+            source=self._SOURCE_LABEL,
             data_type="spot_price",
             status="NOT_CONFIGURED",
             timestamp=timestamp,
-            value={"provider": self.config.provider},
+            value={"provider": "goldapi_io"},
             error_summary=message,
         )
 
@@ -151,11 +149,11 @@ class GoldSpotService:
         return MarketDataPoint(
             key="gold_spot_price",
             asset="Gold",
-            source=self.config.provider,
+            source=self._SOURCE_LABEL,
             data_type="spot_price",
             status="FAIL",
             timestamp=timestamp,
-            value={"provider": self.config.provider},
+            value={"provider": "goldapi_io"},
             error_summary=message,
         )
 

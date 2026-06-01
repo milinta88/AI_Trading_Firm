@@ -50,14 +50,14 @@ fred:
       stale_after_days: 45
 
 gold_spot_provider:
-  enabled: false
-  provider: gold_api
+  enabled: true
+  provider: goldapi_io
   url: ""
   api_key_env: GOLD_API_KEY
   timeout_seconds: 10
 
 dxy_provider:
-  enabled: false
+  enabled: true
   provider: yahoo_finance
   symbol: DX-Y.NYB
   timeout_seconds: 10

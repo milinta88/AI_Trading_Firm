@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_APP_MODES = {"research", "paper", "live", "live_micro"}
 ALLOWED_PAPER_SIGNAL_PROFILES = {"conservative", "balanced", "exploratory"}
 ALLOWED_CONFIDENCE_LEVELS = {"Low", "Medium", "High"}
-ALLOWED_GOLD_SPOT_PROVIDERS = {"gold_api"}
+ALLOWED_GOLD_SPOT_PROVIDERS = {"gold_api", "goldapi_io"}
 ALLOWED_DXY_PROVIDERS = {"yahoo_finance"}
 RESEARCH_READINESS_STALE_KEYS = {
     "btc_price",
@@ -636,7 +636,7 @@ def _build_gold_spot_provider_config(raw_config: object) -> GoldSpotProviderConf
     api_key_env = str(section.get("api_key_env", "GOLD_API_KEY")).strip() or "GOLD_API_KEY"
     return GoldSpotProviderConfig(
         enabled=_as_bool(section.get("enabled", False)),
-        provider=str(section.get("provider", "gold_api")).strip().lower() or "gold_api",
+        provider=str(section.get("provider", "goldapi_io")).strip().lower() or "goldapi_io",
         url=str(section.get("url", "")).strip(),
         api_key_env=api_key_env,
         api_key=_clean_optional_text(os.getenv(api_key_env)),

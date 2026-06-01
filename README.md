@@ -150,7 +150,7 @@ See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) f
 ## Phase 2.4B Gold Research Input Providers
 
 - Adds optional read-only `gold_spot_provider` and `dxy_provider` config sections
-- Gold spot uses a configurable `gold_api`-style provider with the API key kept in the environment only
+- Gold spot uses a configurable `goldapi_io` provider with the API key kept in the environment only
 - DXY uses a read-only Yahoo Finance quote path for research monitoring only
 - Both providers are disabled by default and return `NOT_CONFIGURED` until explicitly enabled
 - Daily brief, dashboard, and research readiness keep running safely if these providers are disabled, stale, or unavailable
@@ -212,7 +212,7 @@ These providers are read-only and disabled by default.
 ```yaml
 gold_spot_provider:
   enabled: false
-  provider: gold_api
+  provider: goldapi_io
   url: ""
   api_key_env: GOLD_API_KEY
   timeout_seconds: 10

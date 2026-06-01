@@ -68,7 +68,7 @@ def test_load_config_reads_gold_spot_api_key_from_configured_env_name(
             [
                 "gold_spot_provider:",
                 "  enabled: true",
-                "  provider: gold_api",
+                "  provider: goldapi_io",
                 "  url: https://example.com/gold",
                 "  api_key_env: CUSTOM_GOLD_KEY",
                 "  timeout_seconds: 10",
