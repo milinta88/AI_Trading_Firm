@@ -1,0 +1,323 @@
+# AI Trading Firm
+
+Phase 1 MVP for a research-first trading workflow that produces a daily Telegram brief for Gold and BTC.
+
+Phase 1.2 adds read-only public market data for research/reporting while keeping execution fully disabled.
+Phase 1.3 adds a deterministic scoring engine with component breakdowns, confidence, and data completeness.
+Phase 1.4 adds optional read-only FRED macro integration for Gold while keeping execution fully disabled.
+Phase 1.5 adds read-only BTC derivatives integration for funding rate and open interest using public endpoints only.
+Phase 1.6 adds a read-only Streamlit dashboard for monitoring reports, snapshots, scores, and safety status.
+Phase 1.7 adds historical trend logic using persisted SQLite market snapshots only.
+Phase 1.8 adds dashboard charts, filters, CSV exports, and multi-point trend summaries from persisted snapshots.
+Phase 1.9 adds report archive search, review tools, and read-only data hygiene checks.
+Phase 2.0 adds a simulated-only paper trading engine with local SQLite orders, positions, trades, equity, and risk events.
+Phase 2.1 adds read-only paper trading review analytics, signal review summaries, run summaries, and local text reporting.
+Phase 2.2 adds configurable paper signal tuning profiles and normalized signal-review analytics for clean accepted/rejected/no-trade reconciliation.
+
+This project still does not execute real trades. It does not route live orders, connect to MT5, or connect to private exchange APIs.
+
+See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) for the living roadmap, completed phases, and next recommended milestones.
+
+## Scope
+
+- Research mode only
+- No real trade execution
+- No order routing or exchange connectivity
+- No MT5 connectivity
+- No exchange private API connectivity
+- No real buy/sell order capability
+- Read-only public market data only
+- Simulated paper trading only when explicitly enabled
+- Placeholder analysis bots with safe fallback behavior
+- SQLite persistence for workflow runs and message logs
+
+## Phase 1.2 Highlights
+
+- Read-only BTCUSDT public price fetch
+- Read-only Alternative.me Fear & Greed Index fetch
+- Gold macro placeholders for future FRED integration
+- Data Quality Bot that marks sources as `OK`, `FAIL`, `NOT_CONFIGURED`, or `STALE`
+- Market snapshots persisted in SQLite
+- Daily brief continues running even if external APIs fail
+
+## Phase 1.3 Scoring Engine
+
+- Deterministic rule-based scoring only
+- No LLM-based trading decisions
+- Standard score outputs include total score, bias, confidence, data completeness, component breakdown, and warnings.
+- Score snapshots persisted in SQLite
+- Risk Officer now considers confidence and data completeness
+- Daily brief includes concise score breakdown sections for Gold and BTC
+
+## Phase 1.4 FRED Macro Integration
+
+- Optional `FRED_API_KEY` environment variable for read-only macro data
+- Read-only FRED service for latest macro observations
+- Initial configured series: US10Y, 10Y real yield, Fed Funds, and CPI
+- Gold macro snapshots persisted in SQLite
+- Gold scoring can use live read-only macro data when available
+- Daily brief still completes safely if FRED is missing, stale, or unavailable
+
+## Phase 1.5 BTC Derivatives Integration
+
+- Read-only Binance USD-M Futures funding-rate snapshot via a public endpoint
+- Read-only Binance USD-M Futures open-interest snapshot via a public endpoint
+- BTC derivatives snapshots persisted in SQLite
+- BTC scoring now uses funding rate directly and tracks open interest as context
+- System Health includes a dedicated BTC derivatives status
+- Daily brief still completes safely if derivatives endpoints fail or become unavailable
+
+## Phase 1.6 Streamlit Dashboard
+
+- Read-only dashboard over the existing SQLite database
+- Shows latest workflow status, market snapshots, scores, risk status, report text, and message logs
+- Includes Safety and Risk view with `EXECUTION DISABLED` and `WATCH ONLY`
+- Handles missing database or missing tables gracefully
+- Does not fetch new trading data, mutate state, route orders, or execute trades
+
+## Phase 1.7 Historical Trend Logic
+
+- Dynamic trend analysis over persisted `market_snapshots`
+- No new market-data endpoints and no state mutation
+- BTC trends cover price, Fear & Greed, funding rate, and open interest
+- Gold macro trends cover US10Y, real yield, Fed Funds, and CPI
+- BTC confidence can become `High` only when open-interest trend history is valid and no major warnings exist
+- Daily brief and dashboard include concise trend context
+
+## Phase 1.8 Dashboard Charts And Multi-Point Trends
+
+- Streamlit dashboard charts for BTC price, Fear & Greed, funding rate, open interest, Gold US10Y, Gold real yield, and asset scores
+- Dashboard filters for date range, asset, data type, and row limits
+- CSV downloads for recent market snapshots and score snapshots
+- Multi-point trend summaries use the latest persisted OK snapshots without fetching new data
+- Dashboard remains read-only and monitoring-only
+
+## Phase 1.9 Report Archive And Data Hygiene
+
+- Read-only report archive over stored workflow runs, daily brief text, and Telegram/message logs
+- Archive search by keyword, date range, and status
+- Dashboard report preview with TXT and CSV download options
+- Data hygiene checks for duplicate snapshots, missing recent data, status distribution, data gaps, and null/empty values
+- Hygiene checks provide suggested actions but never delete, compact, or mutate data
+
+## Phase 2.0 Paper Trading
+
+- Simulated orders only; no real order routing, MT5 `order_send`, exchange API keys, or private trading endpoints
+- Disabled by default with `paper_trading.enabled: false`
+- Stores simulated orders, positions, trades, equity curve, and risk events in SQLite
+- Builds conservative paper signals from existing score snapshots and persisted market prices
+- Enforces paper-only risk checks such as max risk per trade, max daily loss, max open positions, and long/short permissions
+- Dashboard includes a Paper Trading tab clearly labeled `SIMULATED ONLY`
+
+## Phase 2.1 Paper Trading Analytics
+
+- Read-only analytics over local SQLite paper tables only
+- Tracks latest equity, total P&L, drawdown, win rate, profit factor, average P&L, and average R-multiple
+- Summarizes signal review outcomes including accepted, rejected, and no-trade counts
+- Persists paper run summaries for workflow review and audit
+- Adds `python main.py --paper-report` for a local text-only simulated-paper report
+- Expands the dashboard Paper Trading tab with analytics cards, rejection summaries, closed-position review, and run summaries
+
+## Phase 2.2 Paper Signal Tuning And Review Normalization
+
+- Adds configurable `paper_signal` tuning with `conservative`, `balanced`, and `exploratory` paper-only profiles
+- Moves paper-signal score, confidence, and data-completeness thresholds into config
+- Persists normalized `paper_signal_reviews` so each evaluated asset becomes exactly one `ACCEPTED`, `REJECTED`, or `NO_TRADE` review row
+- Reconciles paper analytics cleanly: `signals_evaluated = signals_accepted + signals_rejected + no_trade_count`
+- Dashboard and `python main.py --paper-report` now show active profile, tuning summary, no-trade reasons, and normalized review notes
+- Legacy `paper_risk_events` remain available for audit, but normalized review analytics avoid double-counting them
+
+## Windows Setup
+
+1. Open PowerShell in the project folder:
+
+```powershell
+cd "C:\Users\saroj\Documents\New project\AI_Trading_Firm"
+```
+
+2. Create a virtual environment:
+
+```powershell
+python -m venv .venv
+```
+
+3. Activate it:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+4. Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+## Create `.env`
+
+Copy the example file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then edit `.env` and add Telegram credentials only if you want live message delivery:
+
+```dotenv
+TELEGRAM_BOT_TOKEN=123456:your_bot_token_here
+TELEGRAM_CHAT_ID=123456789
+FRED_API_KEY=your_fred_api_key_here
+APP_MODE=research
+LOG_LEVEL=INFO
+```
+
+If `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHAT_ID` is missing, the app automatically stays in `DRY_RUN` mode and logs the message locally instead of sending it.
+If `FRED_API_KEY` is missing, FRED macro sources stay `NOT_CONFIGURED` and the daily brief continues in research mode.
+
+## Run The App
+
+Default run:
+
+```powershell
+python main.py
+```
+
+Forced dry-run:
+
+```powershell
+python main.py --dry-run
+```
+
+Live Telegram daily brief:
+
+```powershell
+python main.py --send-telegram
+```
+
+Telegram connectivity test only:
+
+```powershell
+python main.py --test-telegram
+```
+
+Paper trading run:
+
+```powershell
+python main.py --paper-run
+```
+
+Read-only paper analytics report:
+
+```powershell
+python main.py --paper-report
+```
+
+Read-only dashboard:
+
+```powershell
+streamlit run dashboard/app.py
+```
+
+Windows dashboard launcher:
+
+```powershell
+run_dashboard.bat
+```
+
+The safest routine for scheduled reporting is still:
+
+```powershell
+python main.py --dry-run
+```
+
+## CLI Behavior
+
+- `python main.py` runs the daily brief once. If Telegram credentials exist, it can send live. If they do not exist, it falls back to `DRY_RUN`.
+- `python main.py --dry-run` never sends Telegram, even if credentials exist.
+- `python main.py --send-telegram` sends the daily brief if credentials exist. If credentials are missing, it stays in `DRY_RUN`.
+- `python main.py --test-telegram` sends a short test message only. If credentials are missing, it stays in `DRY_RUN` and does not crash.
+- `python main.py --paper-run` runs the normal daily brief first, then runs the paper trading orchestrator only when `paper_trading.enabled` is `true`.
+- `python main.py --paper-report` prints a local text-only paper trading review report from SQLite and does not run the workflow or simulation.
+
+## Read-Only Market Data
+
+Phase 1.2 through Phase 1.9 use read-only endpoints and persisted snapshots only.
+
+- BTC price uses a public Binance ticker endpoint.
+- Fear & Greed uses the public Alternative.me API.
+- BTC funding rate uses Binance's public USD-M Futures mark-price endpoint.
+- BTC open interest uses Binance's public USD-M Futures open-interest endpoint.
+- Open interest trend is computed from persisted snapshots when enough history exists.
+- Multi-point trend summaries are computed from persisted snapshots only.
+- BTC confidence can rise above `Medium` only when persisted open-interest trend logic is available and clean.
+- Gold macro inputs can use optional read-only FRED series.
+- DXY and Gold spot price remain `NOT_CONFIGURED` until a safe read-only source is added.
+
+If any external API fails, times out, returns invalid JSON, or becomes unavailable, the daily brief still completes and records the missing source as unavailable instead of crashing.
+
+## Dashboard
+
+The dashboard reads from SQLite only and is intended for monitoring generated reports and persisted snapshots.
+
+```powershell
+streamlit run dashboard/app.py
+```
+
+You can also use [run_dashboard.bat](<C:/Users/saroj/Documents/New project/AI_Trading_Firm/run_dashboard.bat>) on Windows. Run `python main.py --dry-run` first if the database has not been created yet.
+
+Dashboard Phase 1.8 features include native Streamlit charts, date/asset/data-type filters, row-limit controls, multi-point trend context, and CSV exports for recent market and score snapshots. Phase 1.9 adds report archive search and data hygiene tabs. The dashboard does not mutate the database or trading state.
+Phase 2.0 adds a Paper Trading tab for simulated-only local orders, open positions, risk events, and paper equity curve. Phase 2.1 expands that tab with paper performance metrics, signal review summaries, rejection charts, closed-position review, and persisted paper run summaries.
+Phase 2.2 adds profile-aware paper signal tuning, normalized signal-review tables, no-trade reason charts, and profile/status filters for recent review rows.
+
+See [docs/paper_trading.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/docs/paper_trading.md>) for the paper trading design and safety rules.
+
+## Retention Policy
+
+Phase 1.9 does not delete data automatically.
+
+- Current policy: preserve all workflow runs, market snapshots, score snapshots, and outbound message logs.
+- Future option: archive old snapshots to a separate file after explicit approval.
+- Future option: compact duplicate snapshots after explicit approval and audit review.
+- Future option: keep all snapshots permanently if storage remains manageable.
+
+Any future retention or compaction feature must remain separate from trading execution and must not remove audit data without explicit phase approval.
+
+## Windows Task Scheduler
+
+The project includes [run_daily_brief.bat](<C:/Users/saroj/Documents/New project/AI_Trading_Firm/run_daily_brief.bat>) for scheduled runs.
+
+1. Open Task Scheduler.
+2. Create a new basic task.
+3. Pick your preferred daily schedule.
+4. Set the action to start a program.
+5. Choose the batch file: [run_daily_brief.bat](<C:/Users/saroj/Documents/New project/AI_Trading_Firm/run_daily_brief.bat>).
+6. Make sure the task starts in the project folder if your environment requires it.
+7. Confirm that `.env` exists before the scheduled run if you want live Telegram delivery.
+
+The batch file runs:
+
+```powershell
+python main.py --send-telegram
+```
+
+## Logging And Safety
+
+- Logs are written to `data/logs/ai_trading_firm.log`.
+- Telegram failures are logged and stored in SQLite.
+- Market data snapshots are stored in SQLite.
+- Score snapshots are stored in SQLite.
+- Paper trading records are simulated-only and stored locally in SQLite.
+- The app never prints Telegram secrets.
+- `risk.execution_enabled` must remain `false`.
+- This repository is still research/reporting only.
+- Real execution stays disabled even when market data or paper trading is available.
+
+## Tests
+
+If `pytest` is installed:
+
+```powershell
+pytest
+```
+
+The included tests do not require Telegram credentials.

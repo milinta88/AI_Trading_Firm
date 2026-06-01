@@ -1,0 +1,79 @@
+app:
+  name: AI Trading Firm
+  mode: research
+  timezone: Asia/Bangkok
+
+database:
+  path: data/database.db
+
+logging:
+  level: INFO
+  file_path: data/logs/ai_trading_firm.log
+
+telegram:
+  timeout_seconds: 10
+  dry_run_if_missing_credentials: true
+
+market_data:
+  timeout_seconds: 10
+  btc_public_price_url: https://api.binance.com/api/v3/ticker/price
+  fear_and_greed_url: https://api.alternative.me/fng/
+
+btc_derivatives:
+  symbol: BTCUSDT
+  funding_rate_url: https://fapi.binance.com/fapi/v1/premiumIndex
+  open_interest_url: https://fapi.binance.com/fapi/v1/openInterest
+
+fred:
+  base_url: https://api.stlouisfed.org/fred/series/observations
+  timeout_seconds: 10
+  series:
+    gold_us10y:
+      series_id: DGS10
+      data_type: us10y
+      display_name: US10Y
+      stale_after_days: 10
+    gold_real_yield:
+      series_id: DFII10
+      data_type: real_yield
+      display_name: Real Yield
+      stale_after_days: 10
+    gold_fed_funds:
+      series_id: FEDFUNDS
+      data_type: fed_funds
+      display_name: Fed Funds
+      stale_after_days: 45
+    gold_cpi:
+      series_id: CPIAUCSL
+      data_type: cpi
+      display_name: CPI
+      stale_after_days: 45
+
+risk:
+  max_daily_loss_pct: 1.0
+  max_weekly_loss_pct: 3.0
+  # Must remain false. This project does not execute real trades.
+  execution_enabled: false
+
+paper_trading:
+  enabled: false
+  starting_equity: 1000
+  base_currency: USD
+  max_risk_per_trade_pct: 0.25
+  max_daily_loss_pct: 1.0
+  max_open_positions: 2
+  allow_long: true
+  allow_short: true
+  fill_mode: close_price
+
+paper_signal:
+  profile: conservative
+  btc_long_score_threshold: 70
+  btc_short_score_threshold: 35
+  gold_long_score_threshold: 70
+  gold_short_score_threshold: 35
+  min_confidence: Medium
+  min_btc_data_completeness: 80
+  min_gold_data_completeness: 60
+  allow_neutral_bias: false
+  exploratory_mode: false
