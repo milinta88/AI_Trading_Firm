@@ -4,7 +4,7 @@
 AI Trading Firm Daily Brief
 Date: 2026-05-28
 Mode: Research
-Execution: Disabled (Phase 1.7)
+Execution: Disabled (Research Only)
 
 Market Data:
 BTC Price: 72,733.07 USDT
@@ -68,6 +68,23 @@ Score Breakdown:
 - Open Interest: +0/5 (OK) value=106,924.062
 Warnings:
 - None
+
+Market Regime And Data Readiness:
+BTC:
+- Regime: TREND_DOWN | Readiness Score: 100/100 | Decision Ready: YES
+- Data Completeness: 100%
+- Stale Sources: None
+- Missing Sources: None
+Gold:
+- Regime: INSUFFICIENT_DATA | Readiness Score: 20/100 | Decision Ready: NO
+- Data Completeness: 20%
+- Stale Sources: Gold CPI, Gold Fed Funds
+- Missing Sources: Gold DXY, Gold Spot Price
+- No-Trade Readiness Reasons:
+  - Gold regime classification requires at least 10 persisted OK US10Y and real-yield snapshots.
+  - Stale sources: Gold CPI, Gold Fed Funds.
+  - Missing sources: Gold DXY, Gold Spot Price.
+  - Readiness score 20 is below the configured minimum 70.
 
 Macro Regime:
 Neutral

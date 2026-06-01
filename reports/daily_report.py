@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.models import DailyBriefContext, MarketDataPoint, TrendResult
+from core.models import DailyBriefContext, MarketDataPoint, ResearchReadinessResult, TrendResult
 from scoring.models import ScoreComponent
 
 
@@ -73,6 +73,9 @@ class DailyReportFormatter:
             "Warnings:",
             *self._format_list(brief.btc.warnings or ["None"]),
             "",
+            "Market Regime And Data Readiness:",
+            *self._format_readiness_section(brief.research_readiness),
+            "",
             "Macro Regime:",
             brief.macro_regime,
             "",
@@ -144,6 +147,36 @@ class DailyReportFormatter:
             contribution = f"{component.score_contribution:+d}"
             raw_suffix = DailyReportFormatter._format_component_raw_value(component)
             lines.append(f"- {component.name}: {contribution}/{component.max_score} ({component.status}){raw_suffix}")
+        return lines
+
+    @staticmethod
+    def _format_readiness_section(
+        readiness_by_asset: dict[str, ResearchReadinessResult],
+    ) -> list[str]:
+        if not readiness_by_asset:
+            return ["- Not available yet."]
+
+        lines: list[str] = []
+        for asset in ("BTC", "Gold"):
+            readiness = readiness_by_asset.get(asset)
+            if readiness is None:
+                lines.append(f"{asset}: NOT_AVAILABLE")
+                continue
+            lines.extend(
+                [
+                    f"{asset}:",
+                    (
+                        f"- Regime: {readiness.regime} | Readiness Score: {readiness.readiness_score}/100 | "
+                        f"Decision Ready: {'YES' if readiness.decision_ready else 'NO'}"
+                    ),
+                    f"- Data Completeness: {readiness.data_completeness}%",
+                    f"- Stale Sources: {', '.join(readiness.stale_sources) if readiness.stale_sources else 'None'}",
+                    f"- Missing Sources: {', '.join(readiness.missing_sources) if readiness.missing_sources else 'None'}",
+                ]
+            )
+            if readiness.no_trade_reasons:
+                lines.append("- No-Trade Readiness Reasons:")
+                lines.extend(f"  - {reason}" for reason in readiness.no_trade_reasons)
         return lines
 
     @staticmethod

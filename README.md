@@ -14,6 +14,7 @@ Phase 2.0 adds a simulated-only paper trading engine with local SQLite orders, p
 Phase 2.1 adds read-only paper trading review analytics, signal review summaries, run summaries, and local text reporting.
 Phase 2.2 adds configurable paper signal tuning profiles and normalized signal-review analytics for clean accepted/rejected/no-trade reconciliation.
 Phase 2.3 adds paper trade journal notes and local CSV review exports for simulated-only review workflows.
+Phase 2.4 adds market regime classification, research readiness scoring, and explicit no-trade readiness reasons from persisted snapshots only.
 
 This project still does not execute real trades. It does not route live orders, connect to MT5, or connect to private exchange APIs.
 
@@ -135,6 +136,15 @@ See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) f
 - Adds `python main.py --paper-export` to write local review CSVs into `data/exports`
 - Adds dashboard download buttons for paper signal reviews, run summaries, and closed simulated trades when available
 - Keeps exports local, read-only with respect to trading logic, and free of secrets
+
+## Phase 2.4 Research Data Quality And Market Regime Foundation
+
+- Adds persisted-snapshot research readiness scoring for BTC and Gold
+- Adds market regime classification using only existing trend analysis and stored market snapshots
+- Adds explicit no-trade readiness reasons when snapshot history, freshness, or completeness is insufficient
+- Persists `research_readiness_snapshots` for dashboard review history
+- Adds a dashboard Research Readiness tab plus concise readiness sections in the daily brief and `python main.py --paper-report`
+- Does not add new execution, broker connectivity, order routing, or strategy auto-ordering
 
 ## Windows Setup
 
@@ -285,6 +295,7 @@ Dashboard Phase 1.8 features include native Streamlit charts, date/asset/data-ty
 Phase 2.0 adds a Paper Trading tab for simulated-only local orders, open positions, risk events, and paper equity curve. Phase 2.1 expands that tab with paper performance metrics, signal review summaries, rejection charts, closed-position review, and persisted paper run summaries.
 Phase 2.2 adds profile-aware paper signal tuning, normalized signal-review tables, no-trade reason charts, and profile/status filters for recent review rows.
 Phase 2.3 adds local paper-review CSV downloads plus a lightweight journal form and recent-notes table for simulated-only review notes.
+Phase 2.4 adds a Research Readiness tab with BTC/Gold readiness cards, regime summaries, missing/stale source review, and persisted readiness history.
 
 See [docs/paper_trading.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/docs/paper_trading.md>) for the paper trading design and safety rules.
 

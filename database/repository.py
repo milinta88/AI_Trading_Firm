@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from core.models import AnalysisResult, MarketDataPoint, RiskStatus
+from core.models import AnalysisResult, MarketDataPoint, ResearchReadinessResult, RiskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +185,43 @@ class WorkflowRepository:
                 ),
             )
         logger.info("Stored score snapshot for %s in workflow run %s.", result.asset, workflow_run_id)
+
+    def store_research_readiness_snapshot(
+        self,
+        workflow_run_id: int,
+        result: ResearchReadinessResult,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO research_readiness_snapshots (
+                    workflow_run_id,
+                    asset,
+                    readiness_score,
+                    regime,
+                    data_completeness,
+                    decision_ready,
+                    stale_sources_json,
+                    missing_sources_json,
+                    warnings_json,
+                    no_trade_reasons_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    workflow_run_id,
+                    result.asset,
+                    result.readiness_score,
+                    result.regime,
+                    result.data_completeness,
+                    int(result.decision_ready),
+                    json.dumps(result.stale_sources),
+                    json.dumps(result.missing_sources),
+                    json.dumps(result.warnings),
+                    json.dumps(result.no_trade_reasons),
+                ),
+            )
+        logger.info("Stored research readiness snapshot for %s in workflow run %s.", result.asset, workflow_run_id)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)

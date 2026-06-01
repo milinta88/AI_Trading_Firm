@@ -1,4 +1,4 @@
-# Phase 2.0 Through 2.3 Paper Trading
+# Phase 2.0 Through 2.4 Paper Trading
 
 Paper trading is simulated only. It does not send real orders, connect to MT5, call `order_send`, use exchange API keys, or touch private trading endpoints.
 
@@ -204,3 +204,12 @@ The Paper Trading tab now includes:
 - A recent journal-notes table
 
 These tools are for simulated-only review and audit support. They do not enable real trading, order routing, broker connectivity, MT5, or private exchange APIs.
+
+## Phase 2.4 Research Readiness Support
+
+Phase 2.4 does not change simulated order logic. It adds a research-readiness layer that `python main.py --paper-report` can summarize alongside paper analytics.
+
+- Readiness uses persisted market snapshots and existing trend analysis only.
+- Regime classification is read-only and asset-specific.
+- Readiness can mark an asset as not decision-ready because of missing data, stale data, or insufficient snapshot history.
+- These readiness summaries are for research quality control, not live execution.

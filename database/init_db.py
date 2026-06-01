@@ -221,6 +221,22 @@ CREATE TABLE IF NOT EXISTS paper_journal_notes (
     tags TEXT,
     is_deleted INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS research_readiness_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_run_id INTEGER NOT NULL,
+    asset TEXT NOT NULL,
+    readiness_score INTEGER NOT NULL,
+    regime TEXT NOT NULL,
+    data_completeness INTEGER NOT NULL,
+    decision_ready INTEGER NOT NULL,
+    stale_sources_json TEXT NOT NULL,
+    missing_sources_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    no_trade_reasons_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs (id)
+);
 """
 
 

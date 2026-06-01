@@ -53,6 +53,19 @@ class MultiPointTrendResult:
 
 
 @dataclass(frozen=True)
+class ResearchReadinessResult:
+    asset: str
+    readiness_score: int
+    regime: str
+    data_completeness: int
+    stale_sources: list[str]
+    missing_sources: list[str]
+    warnings: list[str]
+    decision_ready: bool
+    no_trade_reasons: list[str]
+
+
+@dataclass(frozen=True)
 class DailyBriefContext:
     run_date: date
     mode: str
@@ -64,6 +77,7 @@ class DailyBriefContext:
     risk: RiskStatus
     system_health: dict[str, str]
     trend_context: dict[str, TrendResult] = field(default_factory=dict)
+    research_readiness: dict[str, ResearchReadinessResult] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

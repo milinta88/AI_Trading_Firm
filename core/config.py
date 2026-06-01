@@ -18,6 +18,18 @@ logger = logging.getLogger(__name__)
 ALLOWED_APP_MODES = {"research", "paper", "live", "live_micro"}
 ALLOWED_PAPER_SIGNAL_PROFILES = {"conservative", "balanced", "exploratory"}
 ALLOWED_CONFIDENCE_LEVELS = {"Low", "Medium", "High"}
+RESEARCH_READINESS_STALE_KEYS = {
+    "btc_price",
+    "btc_derivatives",
+    "fear_and_greed",
+    "gold_macro",
+}
+DEFAULT_RESEARCH_STALE_AFTER_MINUTES: dict[str, int] = {
+    "btc_price": 60,
+    "btc_derivatives": 240,
+    "fear_and_greed": 1440,
+    "gold_macro": 4320,
+}
 
 PAPER_SIGNAL_PROFILE_PRESETS: dict[str, dict[str, object]] = {
     "conservative": {
@@ -125,6 +137,14 @@ class PaperSignalConfig:
 
 
 @dataclass(frozen=True)
+class ResearchReadinessConfig:
+    enabled: bool
+    min_snapshots_for_regime: int
+    stale_after_minutes: dict[str, int]
+    min_readiness_score_for_decision: int
+
+
+@dataclass(frozen=True)
 class AppConfig:
     project_root: Path
     app_name: str
@@ -152,6 +172,7 @@ class AppConfig:
     execution_enabled: bool
     paper_trading: PaperTradingConfig
     paper_signal: PaperSignalConfig
+    research_readiness: ResearchReadinessConfig
 
     @property
     def telegram_status(self) -> TelegramConfigStatus:
@@ -183,6 +204,7 @@ def load_config(project_root: Path) -> AppConfig:
     risk_section = raw_config.get("risk", {})
     paper_trading_section = raw_config.get("paper_trading", {})
     paper_signal_section = raw_config.get("paper_signal", {})
+    research_readiness_section = raw_config.get("research_readiness", {})
 
     config = AppConfig(
         project_root=project_root,
@@ -223,6 +245,7 @@ def load_config(project_root: Path) -> AppConfig:
         execution_enabled=_as_bool(risk_section.get("execution_enabled", False)),
         paper_trading=_build_paper_trading_config(paper_trading_section),
         paper_signal=_build_paper_signal_config(paper_signal_section),
+        research_readiness=_build_research_readiness_config(research_readiness_section),
     )
 
     validate_config(config)
@@ -347,6 +370,29 @@ def validate_config(config: AppConfig) -> None:
 
     if config.paper_signal.gold_short_score_threshold > config.paper_signal.gold_long_score_threshold:
         errors.append("paper_signal.gold_short_score_threshold must be less than or equal to paper_signal.gold_long_score_threshold.")
+
+    if config.research_readiness.min_snapshots_for_regime < 3:
+        errors.append("research_readiness.min_snapshots_for_regime must be at least 3.")
+
+    if (
+        config.research_readiness.min_readiness_score_for_decision < 0
+        or config.research_readiness.min_readiness_score_for_decision > 100
+    ):
+        errors.append("research_readiness.min_readiness_score_for_decision must be between 0 and 100.")
+
+    missing_stale_keys = RESEARCH_READINESS_STALE_KEYS.difference(config.research_readiness.stale_after_minutes)
+    for key in sorted(missing_stale_keys):
+        errors.append(f"research_readiness.stale_after_minutes.{key} is required.")
+
+    for key, value in config.research_readiness.stale_after_minutes.items():
+        if key not in RESEARCH_READINESS_STALE_KEYS:
+            errors.append(
+                f"research_readiness.stale_after_minutes.{key} is not supported. "
+                f"Allowed keys: {', '.join(sorted(RESEARCH_READINESS_STALE_KEYS))}."
+            )
+            continue
+        if value <= 0:
+            errors.append(f"research_readiness.stale_after_minutes.{key} must be greater than zero.")
 
     if errors:
         raise ConfigValidationError(" ".join(errors))
@@ -516,6 +562,22 @@ def _build_paper_signal_config(raw_config: object) -> PaperSignalConfig:
         ),
         allow_neutral_bias=_as_bool(section.get("allow_neutral_bias", preset["allow_neutral_bias"])),
         exploratory_mode=_as_bool(section.get("exploratory_mode", preset["exploratory_mode"])),
+    )
+
+
+def _build_research_readiness_config(raw_config: object) -> ResearchReadinessConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    raw_stale_after = section.get("stale_after_minutes", {})
+    stale_after_minutes = dict(DEFAULT_RESEARCH_STALE_AFTER_MINUTES)
+    if isinstance(raw_stale_after, dict):
+        for key, default_value in DEFAULT_RESEARCH_STALE_AFTER_MINUTES.items():
+            stale_after_minutes[key] = int(raw_stale_after.get(key, default_value))
+
+    return ResearchReadinessConfig(
+        enabled=_as_bool(section.get("enabled", True)),
+        min_snapshots_for_regime=int(section.get("min_snapshots_for_regime", 10)),
+        stale_after_minutes=stale_after_minutes,
+        min_readiness_score_for_decision=int(section.get("min_readiness_score_for_decision", 70)),
     )
 
 

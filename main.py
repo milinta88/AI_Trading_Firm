@@ -10,6 +10,7 @@ from agents.btc_fundamental_bot import BTCFundamentalBot
 from agents.data_quality_bot import DataQualityBot
 from agents.gold_fundamental_bot import GoldFundamentalBot
 from agents.orchestrator_bot import OrchestratorBot
+from analytics.research_readiness import ResearchReadinessAnalyzer
 from analytics.trend_analyzer import TrendAnalyzer
 from agents.risk_officer_bot import RiskOfficerBot
 from core.config import AppConfig, RuntimeOptions, TelegramRuntimeSettings, load_config, resolve_telegram_runtime
@@ -111,6 +112,10 @@ def build_orchestrator(config: AppConfig, telegram_runtime: TelegramRuntimeSetti
         market_data_service=market_data_service,
         telegram_service=telegram_service,
         trend_analyzer=TrendAnalyzer(config.database_path),
+        research_readiness_analyzer=ResearchReadinessAnalyzer(
+            database_path=config.database_path,
+            config=config.research_readiness,
+        ),
     )
 
 
@@ -198,8 +203,16 @@ def build_paper_report(config: AppConfig) -> str:
         database_path=config.database_path,
         starting_equity=config.paper_trading.starting_equity,
     ).build_report()
+    research_readiness = ResearchReadinessAnalyzer(
+        database_path=config.database_path,
+        config=config.research_readiness,
+    ).analyze_all()
     formatter = PaperTradingReportFormatter()
-    return formatter.format(analytics, paper_signal_summary=asdict(config.paper_signal))
+    return formatter.format(
+        analytics,
+        paper_signal_summary=asdict(config.paper_signal),
+        research_readiness=research_readiness,
+    )
 
 
 def export_paper_review_files(config: AppConfig, project_root: Path) -> list[Path]:

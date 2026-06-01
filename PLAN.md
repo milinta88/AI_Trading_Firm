@@ -161,6 +161,16 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Dashboard Paper Trading tab journal form and recent-note review table
 - No real trading, no live routing, no MT5, and no private exchange APIs
 
+### Phase 2.4 Research Data Quality And Market Regime Foundation
+
+- `research_readiness` config section for minimum snapshot history, stale-source thresholds, and decision-readiness scoring
+- Read-only market regime classification for BTC and Gold using persisted snapshots and trend analysis only
+- Explicit readiness scoring, stale-source review, missing-source review, and no-trade readiness reasons
+- Persisted `research_readiness_snapshots` for audit and dashboard history
+- Daily brief and `python main.py --paper-report` now include concise readiness summaries
+- Dashboard Research Readiness tab with latest readiness cards and recent readiness history
+- No real trading, no live routing, no MT5, and no private exchange APIs
+
 ## Current Known Limitations
 
 - Gold macro FRED data depends on `FRED_API_KEY`; without it, FRED inputs stay `NOT_CONFIGURED`.
@@ -168,6 +178,8 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Gold spot price is still `NOT_CONFIGURED`.
 - BTC funding-rate and open-interest scoring remains intentionally simple and rule-based.
 - Multi-point trend logic is currently used for dashboard monitoring; scoring remains conservative and deterministic.
+- Gold readiness will remain constrained until DXY and gold spot research inputs are configured.
+- Gold macro freshness can degrade quickly because CPI and Fed Funds are slower-moving series than BTC data.
 - Data hygiene checks identify issues but do not repair or compact data automatically.
 - Paper trading is simulated-only and disabled by default.
 - Paper fills use persisted latest snapshot prices, not broker or exchange execution.
@@ -184,7 +196,7 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Keep scoring changes conservative until enough snapshot history exists.
 - Consider explicit retention tooling only after approval, with backups and audit logs.
 
-### Phase 2.4
+### Phase 2.5
 
 - Consider richer paper position lifecycle rules after more snapshot history exists.
 - Consider paper performance slicing by regime, profile, or signal family using persisted local data only.

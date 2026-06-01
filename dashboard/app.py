@@ -42,6 +42,7 @@ def main() -> None:
             "Overview",
             "Market Snapshots",
             "Trend Context",
+            "Research Readiness",
             "Score Snapshots",
             "Daily Brief",
             "Report Archive",
@@ -58,16 +59,18 @@ def main() -> None:
     with tabs[2]:
         _render_trend_context(data, filters)
     with tabs[3]:
-        _render_score_snapshots(data, filters)
+        _render_research_readiness(data)
     with tabs[4]:
-        _render_daily_brief(data)
+        _render_score_snapshots(data, filters)
     with tabs[5]:
-        _render_report_archive(data)
+        _render_daily_brief(data)
     with tabs[6]:
-        _render_data_hygiene(data)
+        _render_report_archive(data)
     with tabs[7]:
-        _render_paper_trading(data)
+        _render_data_hygiene(data)
     with tabs[8]:
+        _render_paper_trading(data)
+    with tabs[9]:
         _render_safety_view(data)
 
 
@@ -357,6 +360,63 @@ def _render_daily_brief(data: DashboardData) -> None:
 
     st.subheader("Recent Telegram / Report Logs")
     _render_table(data.recent_messages, empty_message="No outbound message logs are available yet.")
+
+
+def _render_research_readiness(data: DashboardData) -> None:
+    st.subheader("Research Readiness")
+    st.caption(
+        "Read-only decision-readiness foundation built from persisted market snapshots and trend history only. "
+        "No execution logic is enabled."
+    )
+
+    if not data.research_readiness_enabled:
+        st.info("Research readiness is disabled in config.")
+        return
+
+    latest_rows = data.latest_research_readiness
+    if not latest_rows:
+        st.info("No research readiness data is available yet.")
+        return
+
+    readiness_by_asset = {str(row.get("asset")): row for row in latest_rows}
+    btc = readiness_by_asset.get("BTC")
+    gold = readiness_by_asset.get("Gold")
+    if btc or gold:
+        col_btc, col_gold = st.columns(2)
+        _render_readiness_card(col_btc, btc, data.research_readiness_min_score)
+        _render_readiness_card(col_gold, gold, data.research_readiness_min_score)
+
+    st.markdown("#### Latest Readiness Snapshot")
+    _render_table(
+        _research_readiness_rows(latest_rows),
+        empty_message="No latest research readiness rows are available yet.",
+    )
+
+    st.markdown("#### Readiness Details")
+    for asset in ("BTC", "Gold"):
+        row = readiness_by_asset.get(asset)
+        if row is None:
+            continue
+        st.markdown(f"##### {asset}")
+        _render_key_value_grid(
+            {
+                "Regime": row.get("regime"),
+                "Readiness Score": f"{row.get('readiness_score')}/100",
+                "Decision Ready": "YES" if row.get("decision_ready") else "NO",
+                "Minimum Score": f"{data.research_readiness_min_score}/100",
+                "Data Completeness": f"{row.get('data_completeness')}%",
+            }
+        )
+        _render_text_list("Stale Sources", row.get("stale_sources", []))
+        _render_text_list("Missing Sources", row.get("missing_sources", []))
+        _render_text_list("No-Trade Readiness Reasons", row.get("no_trade_reasons", []))
+        _render_text_list("Warnings", row.get("warnings", []))
+
+    st.markdown("#### Recent Readiness History")
+    _render_table(
+        _research_readiness_rows(data.recent_research_readiness),
+        empty_message="No persisted research readiness history is available yet.",
+    )
 
 
 def _render_report_archive(data: DashboardData) -> None:
@@ -926,6 +986,23 @@ def _paper_signal_review_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
     ]
 
 
+def _research_readiness_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "asset": row.get("asset"),
+            "readiness_score": row.get("readiness_score"),
+            "regime": row.get("regime"),
+            "data_completeness": row.get("data_completeness"),
+            "decision_ready": "YES" if row.get("decision_ready") else "NO",
+            "stale_sources": ", ".join(row.get("stale_sources", [])) if isinstance(row.get("stale_sources"), list) else row.get("stale_sources"),
+            "missing_sources": ", ".join(row.get("missing_sources", [])) if isinstance(row.get("missing_sources"), list) else row.get("missing_sources"),
+            "no_trade_reasons": "; ".join(row.get("no_trade_reasons", [])) if isinstance(row.get("no_trade_reasons"), list) else row.get("no_trade_reasons"),
+            "created_at": row.get("created_at"),
+        }
+        for row in rows
+    ]
+
+
 def _paper_journal_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
@@ -980,6 +1057,22 @@ def _format_metric(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.2f}"
     return str(value)
+
+
+def _render_readiness_card(column, row: dict[str, Any] | None, min_score: int) -> None:
+    if row is None:
+        column.info("No readiness data available yet.")
+        return
+    decision_ready = bool(row.get("decision_ready"))
+    column.metric(
+        f"{row.get('asset')} Readiness",
+        f"{row.get('readiness_score', 0)}/100",
+        "READY" if decision_ready else "NO-TRADE",
+    )
+    column.caption(
+        f"Regime: {row.get('regime')} | Completeness: {row.get('data_completeness')}% | "
+        f"Minimum Score: {min_score}"
+    )
 
 
 def _optional_text(value: str | None) -> str | None:

@@ -30,6 +30,7 @@ class OrchestratorBot:
         market_data_service: MarketDataService,
         telegram_service: TelegramService,
         trend_analyzer: TrendAnalyzer,
+        research_readiness_analyzer,
     ) -> None:
         self.config = config
         self.repository = repository
@@ -41,6 +42,7 @@ class OrchestratorBot:
         self.market_data_service = market_data_service
         self.telegram_service = telegram_service
         self.trend_analyzer = trend_analyzer
+        self.research_readiness_analyzer = research_readiness_analyzer
 
     def run_daily_brief(self) -> WorkflowOutcome:
         run_date = datetime.now(ZoneInfo(self.config.timezone)).date()
@@ -67,6 +69,9 @@ class OrchestratorBot:
                 data_quality_report=data_quality,
             )
             self.repository.store_risk_status(workflow_run_id, risk_status)
+            research_readiness = self.research_readiness_analyzer.analyze_all()
+            for readiness_result in research_readiness.values():
+                self.repository.store_research_readiness_snapshot(workflow_run_id, readiness_result)
 
             report_context = DailyBriefContext(
                 run_date=run_date,
@@ -79,6 +84,7 @@ class OrchestratorBot:
                 risk=risk_status,
                 system_health=self._build_system_health(market_data),
                 trend_context=trend_context,
+                research_readiness=research_readiness,
             )
             report_text = self.report_formatter.format(report_context)
 

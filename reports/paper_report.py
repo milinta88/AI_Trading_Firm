@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.models import ResearchReadinessResult
 from paper_trading.analytics import PaperAnalyticsReport
 
 
 class PaperTradingReportFormatter:
     """Formats a local-only paper trading review report."""
 
-    def format(self, report: PaperAnalyticsReport, paper_signal_summary: dict[str, Any] | None = None) -> str:
+    def format(
+        self,
+        report: PaperAnalyticsReport,
+        paper_signal_summary: dict[str, Any] | None = None,
+        research_readiness: dict[str, ResearchReadinessResult] | None = None,
+    ) -> str:
         performance = report.performance
         signal_review = report.signal_review
         active_profile = None
@@ -135,6 +141,15 @@ class PaperTradingReportFormatter:
             lines.append("Signal Review Notes:")
             lines.extend(f"- {note}" for note in signal_review.notes)
 
+        if research_readiness:
+            lines.extend(
+                [
+                    "",
+                    "Market Regime And Data Readiness:",
+                    *_format_research_readiness(research_readiness),
+                ]
+            )
+
         if report.latest_run_summary:
             lines.extend(
                 [
@@ -165,3 +180,29 @@ def _format_optional_float(value: float | None) -> str:
     if value is None:
         return "N/A"
     return f"{value:.2f}"
+
+
+def _format_research_readiness(
+    readiness_by_asset: dict[str, ResearchReadinessResult],
+) -> list[str]:
+    lines: list[str] = []
+    for asset in ("BTC", "Gold"):
+        readiness = readiness_by_asset.get(asset)
+        if readiness is None:
+            continue
+        lines.extend(
+            [
+                f"{asset}:",
+                (
+                    f"- Regime: {readiness.regime} | Readiness Score: {readiness.readiness_score}/100 | "
+                    f"Decision Ready: {'YES' if readiness.decision_ready else 'NO'}"
+                ),
+                f"- Data Completeness: {readiness.data_completeness}%",
+                f"- Stale Sources: {', '.join(readiness.stale_sources) if readiness.stale_sources else 'None'}",
+                f"- Missing Sources: {', '.join(readiness.missing_sources) if readiness.missing_sources else 'None'}",
+            ]
+        )
+        if readiness.no_trade_reasons:
+            lines.append("- No-Trade Readiness Reasons:")
+            lines.extend(f"  - {reason}" for reason in readiness.no_trade_reasons)
+    return lines or ["- Not available yet."]

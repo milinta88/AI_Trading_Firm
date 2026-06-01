@@ -11,10 +11,15 @@ from typing import Any
 
 import yaml
 
+from analytics.research_readiness import ResearchReadinessAnalyzer
 from analytics.data_hygiene import DataHygieneAnalyzer
 from analytics.report_archive import ArchiveQuery, ReportArchive
 from analytics.trend_analyzer import TrendAnalyzer
-from core.config import PAPER_SIGNAL_PROFILE_PRESETS
+from core.config import (
+    DEFAULT_RESEARCH_STALE_AFTER_MINUTES,
+    PAPER_SIGNAL_PROFILE_PRESETS,
+    ResearchReadinessConfig,
+)
 from paper_trading.analytics import PaperAnalytics
 
 
@@ -27,6 +32,8 @@ class DashboardData:
     execution_enabled: bool
     paper_trading_enabled: bool
     paper_trading_starting_equity: float
+    research_readiness_enabled: bool
+    research_readiness_min_score: int
     latest_workflow_run: dict[str, Any] | None
     latest_market_snapshots: list[dict[str, Any]]
     recent_market_snapshots: list[dict[str, Any]]
@@ -64,6 +71,8 @@ class DashboardData:
     paper_no_trade_reasons: list[dict[str, Any]]
     paper_recent_signal_reviews: list[dict[str, Any]]
     paper_journal_notes: list[dict[str, Any]]
+    latest_research_readiness: list[dict[str, Any]]
+    recent_research_readiness: list[dict[str, Any]]
     paper_signal_config: dict[str, Any] | None = field(
         default_factory=lambda: _default_paper_signal_config("conservative")
     )
@@ -76,6 +85,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
         paper_trading_enabled,
         paper_trading_starting_equity,
         paper_signal_config,
+        research_readiness_config,
         database_path,
     ) = load_dashboard_config(project_root)
 
@@ -85,6 +95,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             execution_enabled=execution_enabled,
             paper_trading_enabled=paper_trading_enabled,
             paper_trading_starting_equity=paper_trading_starting_equity,
+            research_readiness_enabled=research_readiness_config.enabled,
+            research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
             paper_signal_config=paper_signal_config,
             message=f"Database not found at {database_path}. Run python main.py --dry-run first.",
         )
@@ -98,6 +110,12 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             archive_result = _load_report_archive(database_path, limit)
             hygiene_report = _load_data_hygiene(database_path)
             paper_report = _load_paper_analytics(database_path, paper_trading_starting_equity, limit)
+            readiness_report = _load_research_readiness(
+                database_path=database_path,
+                config=research_readiness_config,
+                connection=connection,
+                limit=limit,
+            )
             return DashboardData(
                 database_available=True,
                 database_message=f"Connected read-only to {database_path}.",
@@ -106,6 +124,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 execution_enabled=execution_enabled,
                 paper_trading_enabled=paper_trading_enabled,
                 paper_trading_starting_equity=paper_trading_starting_equity,
+                research_readiness_enabled=research_readiness_config.enabled,
+                research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
                 paper_signal_config=paper_signal_config,
                 latest_workflow_run=_fetch_latest_workflow_run(connection),
                 latest_market_snapshots=latest_market_snapshots,
@@ -144,6 +164,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 paper_no_trade_reasons=paper_report["no_trade_reasons"],
                 paper_recent_signal_reviews=paper_report["recent_signal_reviews"],
                 paper_journal_notes=_fetch_recent_paper_journal_notes(connection, limit),
+                latest_research_readiness=readiness_report["latest"],
+                recent_research_readiness=readiness_report["recent"],
             )
     except sqlite3.Error as exc:
         return _empty_dashboard_data(
@@ -151,26 +173,47 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             execution_enabled=execution_enabled,
             paper_trading_enabled=paper_trading_enabled,
             paper_trading_starting_equity=paper_trading_starting_equity,
+            research_readiness_enabled=research_readiness_config.enabled,
+            research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
             paper_signal_config=paper_signal_config,
             message=f"Unable to read dashboard database: {exc}",
         )
 
 
-def load_dashboard_config(project_root: Path) -> tuple[str, bool, bool, float, dict[str, Any], Path]:
+def load_dashboard_config(
+    project_root: Path,
+) -> tuple[str, bool, bool, float, dict[str, Any], ResearchReadinessConfig, Path]:
     config_path = project_root / "config.yaml"
     if not config_path.exists():
-        return "research", False, False, 10_000.0, _default_paper_signal_config(), project_root / "data" / "database.db"
+        return (
+            "research",
+            False,
+            False,
+            10_000.0,
+            _default_paper_signal_config(),
+            _default_research_readiness_config(),
+            project_root / "data" / "database.db",
+        )
 
     try:
         with config_path.open("r", encoding="utf-8") as handle:
             raw_config = yaml.safe_load(handle) or {}
     except Exception:
-        return "research", False, False, 10_000.0, _default_paper_signal_config(), project_root / "data" / "database.db"
+        return (
+            "research",
+            False,
+            False,
+            10_000.0,
+            _default_paper_signal_config(),
+            _default_research_readiness_config(),
+            project_root / "data" / "database.db",
+        )
 
     app_section = raw_config.get("app", {})
     risk_section = raw_config.get("risk", {})
     paper_trading_section = raw_config.get("paper_trading", {})
     paper_signal_section = raw_config.get("paper_signal", {})
+    research_readiness_section = raw_config.get("research_readiness", {})
     database_section = raw_config.get("database", {})
     database_path = Path(str(database_section.get("path", "data/database.db")))
     if not database_path.is_absolute():
@@ -183,10 +226,19 @@ def load_dashboard_config(project_root: Path) -> tuple[str, bool, bool, float, d
             _as_bool(paper_trading_section.get("enabled", False)),
             float(paper_trading_section.get("starting_equity", 10_000)),
             _load_paper_signal_config(paper_signal_section),
+            _load_research_readiness_config(research_readiness_section),
             database_path,
         )
     except Exception:
-        return "research", False, False, 10_000.0, _default_paper_signal_config(), database_path
+        return (
+            "research",
+            False,
+            False,
+            10_000.0,
+            _default_paper_signal_config(),
+            _default_research_readiness_config(),
+            database_path,
+        )
 
 
 def parse_json_value(raw_value: str | None, fallback: Any = None) -> Any:
@@ -323,6 +375,8 @@ def _empty_dashboard_data(
     execution_enabled: bool,
     paper_trading_enabled: bool,
     paper_trading_starting_equity: float,
+    research_readiness_enabled: bool,
+    research_readiness_min_score: int,
     paper_signal_config: dict[str, Any],
     message: str,
 ) -> DashboardData:
@@ -335,6 +389,8 @@ def _empty_dashboard_data(
         execution_enabled=execution_enabled,
         paper_trading_enabled=paper_trading_enabled,
         paper_trading_starting_equity=paper_trading_starting_equity,
+        research_readiness_enabled=research_readiness_enabled,
+        research_readiness_min_score=research_readiness_min_score,
         paper_signal_config=paper_signal_config,
         latest_workflow_run=None,
         latest_market_snapshots=[],
@@ -414,6 +470,8 @@ def _empty_dashboard_data(
         paper_no_trade_reasons=[],
         paper_recent_signal_reviews=[],
         paper_journal_notes=[],
+        latest_research_readiness=[],
+        recent_research_readiness=[],
     )
 
 
@@ -465,6 +523,22 @@ def _load_paper_analytics(database_path: Path, starting_equity: float, limit: in
     }
 
 
+def _load_research_readiness(
+    database_path: Path,
+    config: ResearchReadinessConfig,
+    connection: sqlite3.Connection,
+    limit: int,
+) -> dict[str, Any]:
+    recent_rows = _fetch_recent_research_readiness(connection, limit)
+    latest_rows = _fetch_latest_research_readiness(connection)
+    if not latest_rows:
+        latest_rows = _build_dynamic_research_readiness_rows(database_path, config)
+    return {
+        "latest": latest_rows,
+        "recent": recent_rows,
+    }
+
+
 def _load_paper_signal_config(raw_config: object) -> dict[str, Any]:
     section = raw_config if isinstance(raw_config, dict) else {}
     profile = str(section.get("profile", "conservative")).strip().lower() or "conservative"
@@ -474,6 +548,22 @@ def _load_paper_signal_config(raw_config: object) -> dict[str, Any]:
     merged["allow_neutral_bias"] = _as_bool(merged.get("allow_neutral_bias", False))
     merged["exploratory_mode"] = _as_bool(merged.get("exploratory_mode", False))
     return merged
+
+
+def _load_research_readiness_config(raw_config: object) -> ResearchReadinessConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    raw_stale_after = section.get("stale_after_minutes", {})
+    stale_after_minutes = dict(DEFAULT_RESEARCH_STALE_AFTER_MINUTES)
+    if isinstance(raw_stale_after, dict):
+        for key, default_value in DEFAULT_RESEARCH_STALE_AFTER_MINUTES.items():
+            stale_after_minutes[key] = int(raw_stale_after.get(key, default_value))
+
+    return ResearchReadinessConfig(
+        enabled=_as_bool(section.get("enabled", True)),
+        min_snapshots_for_regime=int(section.get("min_snapshots_for_regime", 10)),
+        stale_after_minutes=stale_after_minutes,
+        min_readiness_score_for_decision=int(section.get("min_readiness_score_for_decision", 70)),
+    )
 
 
 def _default_paper_signal_config(profile: str = "conservative") -> dict[str, Any]:
@@ -490,6 +580,15 @@ def _default_paper_signal_config(profile: str = "conservative") -> dict[str, Any
         "allow_neutral_bias": bool(preset["allow_neutral_bias"]),
         "exploratory_mode": bool(preset["exploratory_mode"]),
     }
+
+
+def _default_research_readiness_config() -> ResearchReadinessConfig:
+    return ResearchReadinessConfig(
+        enabled=True,
+        min_snapshots_for_regime=10,
+        stale_after_minutes=dict(DEFAULT_RESEARCH_STALE_AFTER_MINUTES),
+        min_readiness_score_for_decision=70,
+    )
 
 
 def _numeric_market_value(row: dict[str, Any]) -> float | None:
@@ -739,6 +838,69 @@ def _fetch_recent_paper_journal_notes(connection: sqlite3.Connection, limit: int
         """,
         (limit,),
     )
+
+
+def _fetch_latest_research_readiness(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+    if not _table_exists(connection, "research_readiness_snapshots"):
+        return []
+
+    rows = _fetch_all(connection, "SELECT * FROM research_readiness_snapshots ORDER BY id DESC")
+    latest_by_asset: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        asset = str(row.get("asset") or "UNKNOWN")
+        if asset not in latest_by_asset:
+            latest_by_asset[asset] = _parse_research_readiness_snapshot(row)
+    return list(latest_by_asset.values())
+
+
+def _fetch_recent_research_readiness(connection: sqlite3.Connection, limit: int) -> list[dict[str, Any]]:
+    if not _table_exists(connection, "research_readiness_snapshots"):
+        return []
+    rows = _fetch_all(
+        connection,
+        "SELECT * FROM research_readiness_snapshots ORDER BY id DESC LIMIT ?",
+        (limit,),
+    )
+    return [_parse_research_readiness_snapshot(row) for row in rows]
+
+
+def _parse_research_readiness_snapshot(row: dict[str, Any]) -> dict[str, Any]:
+    parsed = dict(row)
+    parsed["decision_ready"] = bool(parsed.get("decision_ready"))
+    parsed["stale_sources"] = parse_json_value(row.get("stale_sources_json"), fallback=[])
+    parsed["missing_sources"] = parse_json_value(row.get("missing_sources_json"), fallback=[])
+    parsed["warnings"] = parse_json_value(row.get("warnings_json"), fallback=[])
+    parsed["no_trade_reasons"] = parse_json_value(row.get("no_trade_reasons_json"), fallback=[])
+    return parsed
+
+
+def _build_dynamic_research_readiness_rows(
+    database_path: Path,
+    config: ResearchReadinessConfig,
+) -> list[dict[str, Any]]:
+    results = ResearchReadinessAnalyzer(database_path=database_path, config=config).analyze_all()
+    rows: list[dict[str, Any]] = []
+    for asset in ("BTC", "Gold"):
+        result = results.get(asset)
+        if result is None:
+            continue
+        rows.append(
+            {
+                "id": None,
+                "workflow_run_id": None,
+                "asset": result.asset,
+                "readiness_score": result.readiness_score,
+                "regime": result.regime,
+                "data_completeness": result.data_completeness,
+                "decision_ready": result.decision_ready,
+                "stale_sources": result.stale_sources,
+                "missing_sources": result.missing_sources,
+                "warnings": result.warnings,
+                "no_trade_reasons": result.no_trade_reasons,
+                "created_at": None,
+            }
+        )
+    return rows
 
 
 def _derive_system_health(connection: sqlite3.Connection) -> dict[str, str]:

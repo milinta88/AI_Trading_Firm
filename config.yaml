@@ -77,3 +77,13 @@ paper_signal:
   min_gold_data_completeness: 60
   allow_neutral_bias: false
   exploratory_mode: false
+
+research_readiness:
+  enabled: true
+  min_snapshots_for_regime: 10
+  stale_after_minutes:
+    btc_price: 60
+    btc_derivatives: 240
+    fear_and_greed: 1440
+    gold_macro: 4320
+  min_readiness_score_for_decision: 70
