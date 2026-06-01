@@ -549,7 +549,7 @@ def _render_paper_trading(data: DashboardData) -> None:
     st.caption("Paper trading reads local SQLite state only. It does not route orders or call MT5/exchange trading APIs.")
 
     metrics = data.paper_analytics_summary
-    signal_config = data.paper_signal_config
+    signal_config = getattr(data, "paper_signal_config", None) or {}
     review_summary = data.paper_signal_review_summary
     latest_equity = data.paper_latest_equity or {}
     col_enabled, col_starting, col_equity, col_pnl = st.columns(4)

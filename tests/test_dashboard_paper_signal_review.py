@@ -50,6 +50,34 @@ def test_dashboard_loader_exposes_balanced_signal_config_and_normalized_reviews(
     assert {row["review_status"] for row in data.paper_recent_signal_reviews} == {"ACCEPTED", "NO_TRADE"}
 
 
+def test_dashboard_loader_returns_safe_paper_signal_defaults_when_disabled(tmp_path: Path) -> None:
+    (tmp_path / "config.yaml").write_text(
+        "\n".join(
+            [
+                "app:",
+                "  name: AI Trading Firm",
+                "  mode: research",
+                "database:",
+                "  path: data/database.db",
+                "risk:",
+                "  execution_enabled: false",
+                "paper_trading:",
+                "  enabled: false",
+                "  starting_equity: 10000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    data = load_dashboard_data(tmp_path)
+
+    assert data.paper_trading_enabled is False
+    assert data.paper_signal_config is not None
+    assert data.paper_signal_config["profile"] == "conservative"
+    assert data.paper_signal_config["btc_long_score_threshold"] == 70
+    assert data.paper_signal_config["gold_short_score_threshold"] == 35
+
+
 def _write_config(tmp_path: Path) -> None:
     (tmp_path / "config.yaml").write_text(
         "\n".join(

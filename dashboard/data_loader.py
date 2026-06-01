@@ -4,7 +4,7 @@ import csv
 import json
 import sqlite3
 from datetime import date, datetime
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -26,7 +26,6 @@ class DashboardData:
     execution_enabled: bool
     paper_trading_enabled: bool
     paper_trading_starting_equity: float
-    paper_signal_config: dict[str, Any]
     latest_workflow_run: dict[str, Any] | None
     latest_market_snapshots: list[dict[str, Any]]
     recent_market_snapshots: list[dict[str, Any]]
@@ -63,6 +62,9 @@ class DashboardData:
     paper_rejection_reasons: list[dict[str, Any]]
     paper_no_trade_reasons: list[dict[str, Any]]
     paper_recent_signal_reviews: list[dict[str, Any]]
+    paper_signal_config: dict[str, Any] | None = field(
+        default_factory=lambda: _default_paper_signal_config("conservative")
+    )
 
 
 def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
@@ -155,8 +157,11 @@ def load_dashboard_config(project_root: Path) -> tuple[str, bool, bool, float, d
     if not config_path.exists():
         return "research", False, False, 10_000.0, _default_paper_signal_config(), project_root / "data" / "database.db"
 
-    with config_path.open("r", encoding="utf-8") as handle:
-        raw_config = yaml.safe_load(handle) or {}
+    try:
+        with config_path.open("r", encoding="utf-8") as handle:
+            raw_config = yaml.safe_load(handle) or {}
+    except Exception:
+        return "research", False, False, 10_000.0, _default_paper_signal_config(), project_root / "data" / "database.db"
 
     app_section = raw_config.get("app", {})
     risk_section = raw_config.get("risk", {})
@@ -167,14 +172,17 @@ def load_dashboard_config(project_root: Path) -> tuple[str, bool, bool, float, d
     if not database_path.is_absolute():
         database_path = project_root / database_path
 
-    return (
-        str(app_section.get("mode", "research")).strip().lower() or "research",
-        _as_bool(risk_section.get("execution_enabled", False)),
-        _as_bool(paper_trading_section.get("enabled", False)),
-        float(paper_trading_section.get("starting_equity", 10_000)),
-        _load_paper_signal_config(paper_signal_section),
-        database_path,
-    )
+    try:
+        return (
+            str(app_section.get("mode", "research")).strip().lower() or "research",
+            _as_bool(risk_section.get("execution_enabled", False)),
+            _as_bool(paper_trading_section.get("enabled", False)),
+            float(paper_trading_section.get("starting_equity", 10_000)),
+            _load_paper_signal_config(paper_signal_section),
+            database_path,
+        )
+    except Exception:
+        return "research", False, False, 10_000.0, _default_paper_signal_config(), database_path
 
 
 def parse_json_value(raw_value: str | None, fallback: Any = None) -> Any:
@@ -314,6 +322,7 @@ def _empty_dashboard_data(
     paper_signal_config: dict[str, Any],
     message: str,
 ) -> DashboardData:
+    paper_signal_config = paper_signal_config or _default_paper_signal_config()
     return DashboardData(
         database_available=False,
         database_message=message,
