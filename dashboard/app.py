@@ -29,6 +29,8 @@ _DASHBOARD_DATA_ALIASES: dict[str, tuple[str, ...]] = {
     "paper_analytics_summary": ("paper_performance_summary",),
     "latest_research_readiness": ("research_readiness_latest",),
     "recent_research_readiness": ("research_readiness_history",),
+    "latest_strategy_hypotheses": ("strategy_hypotheses_latest",),
+    "recent_strategy_hypotheses": ("strategy_hypotheses_history",),
 }
 
 
@@ -60,6 +62,7 @@ def main() -> None:
             "Market Snapshots",
             "Trend Context",
             "Research Readiness",
+            "Strategy Hypotheses",
             "Score Snapshots",
             "Daily Brief",
             "Report Archive",
@@ -78,16 +81,18 @@ def main() -> None:
     with tabs[3]:
         _render_research_readiness(data)
     with tabs[4]:
-        _render_score_snapshots(data, filters)
+        _render_strategy_hypotheses(data, filters)
     with tabs[5]:
-        _render_daily_brief(data)
+        _render_score_snapshots(data, filters)
     with tabs[6]:
-        _render_report_archive(data)
+        _render_daily_brief(data)
     with tabs[7]:
-        _render_data_hygiene(data)
+        _render_report_archive(data)
     with tabs[8]:
-        _render_paper_trading(data)
+        _render_data_hygiene(data)
     with tabs[9]:
+        _render_paper_trading(data)
+    with tabs[10]:
         _render_safety_view(data)
 
 
@@ -494,6 +499,70 @@ def _render_report_archive(data: DashboardData) -> None:
 
     st.markdown("#### Recent Telegram / Message Logs")
     _render_table(_archive_table_rows(message_items), empty_message="No message logs match the selected archive filters.")
+
+
+def _render_strategy_hypotheses(data: DashboardData, filters: dict[str, Any]) -> None:
+    data = _coerce_dashboard_data(data)
+    st.subheader("Strategy Hypotheses")
+    st.caption(
+        "Deterministic research hypotheses only. These are review artifacts built from scores, readiness, "
+        "trend context, and data quality. They do not create orders."
+    )
+
+    if not getattr(data, "strategy_hypotheses_enabled", False):
+        st.info("Strategy hypotheses are disabled in config.")
+        return
+
+    latest_rows = filter_rows(
+        data.latest_strategy_hypotheses,
+        asset=filters.get("asset"),
+    )
+    if not latest_rows:
+        st.info("No strategy hypotheses are available yet.")
+        return
+
+    st.markdown("#### Latest Strategy Hypotheses")
+    _render_table(
+        _strategy_hypothesis_rows(latest_rows),
+        empty_message="No latest strategy hypotheses are available yet.",
+    )
+
+    st.markdown("#### Strategy Details")
+    for row in latest_rows:
+        st.markdown(f"##### {row.get('asset')}")
+        _render_key_value_grid(
+            {
+                "Hypothesis": row.get("hypothesis_name"),
+                "Status": row.get("hypothesis_status"),
+                "Direction": row.get("direction_bias"),
+                "Family": row.get("suggested_strategy_family"),
+                "Regime": row.get("regime"),
+                "Readiness Score": f"{row.get('readiness_score')}/100",
+                "Score": f"{row.get('score')}/100",
+                "Confidence": row.get("confidence"),
+                "Data Completeness": f"{row.get('data_completeness')}%",
+                "Holding Period": row.get("suggested_holding_period"),
+                "Created": row.get("created_at"),
+            }
+        )
+        _render_text_list("Reasons", row.get("reasons", []))
+        _render_text_list("Blockers", row.get("blockers", []))
+        _render_text_list("Warnings", row.get("warnings", []))
+        st.markdown(f"**Invalidation Notes**")
+        st.write(row.get("invalidation_notes") or "None")
+
+    st.markdown("#### Recent Strategy Hypothesis History")
+    recent_rows = filter_rows(
+        data.recent_strategy_hypotheses,
+        start_date=filters.get("start_date"),
+        end_date=filters.get("end_date"),
+        asset=filters.get("asset"),
+        limit=filters.get("limit"),
+    )
+    _render_table(
+        _strategy_hypothesis_rows(recent_rows),
+        empty_message="No recent strategy hypothesis history matches the selected filters.",
+    )
 
 
 def _render_archive_date_filter(items: list[dict[str, Any]]) -> tuple[date | None, date | None]:
@@ -1013,6 +1082,28 @@ def _paper_signal_review_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
             "active_profile": row.get("active_profile"),
             "reasons": "; ".join(_review_reason_strings(row.get("reasons", []))) or "None",
             "warnings": "; ".join(row.get("warnings", [])) if isinstance(row.get("warnings"), list) else row.get("warnings"),
+        }
+        for row in rows
+    ]
+
+
+def _strategy_hypothesis_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "asset": row.get("asset"),
+            "hypothesis_name": row.get("hypothesis_name"),
+            "direction_bias": row.get("direction_bias"),
+            "regime": row.get("regime"),
+            "readiness_score": row.get("readiness_score"),
+            "score": row.get("score"),
+            "confidence": row.get("confidence"),
+            "data_completeness": row.get("data_completeness"),
+            "hypothesis_status": row.get("hypothesis_status"),
+            "suggested_strategy_family": row.get("suggested_strategy_family"),
+            "suggested_holding_period": row.get("suggested_holding_period"),
+            "blockers": "; ".join(row.get("blockers", [])) if isinstance(row.get("blockers"), list) else row.get("blockers"),
+            "warnings": "; ".join(row.get("warnings", [])) if isinstance(row.get("warnings"), list) else row.get("warnings"),
+            "created_at": row.get("created_at"),
         }
         for row in rows
     ]

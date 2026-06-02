@@ -180,6 +180,16 @@ Build a research-first AI trading workflow for Gold and BTC.
 - FRED setup now has clearer environment guidance and startup warnings when `FRED_API_KEY` is missing
 - No real trading, no live routing, no MT5, and no private exchange APIs
 
+### Phase 2.5 Strategy Hypothesis Layer
+
+- Deterministic strategy-hypothesis engine built from persisted/read-only research outputs only
+- `strategy_hypotheses` config section with enable flag, readiness threshold, minimum confidence, and watch-mode handling
+- Persisted `strategy_hypotheses` table for BTC and Gold research hypotheses
+- Daily brief includes concise Strategy Hypotheses section
+- `python main.py --paper-report` includes latest persisted strategy hypotheses
+- Dashboard includes a Strategy Hypotheses tab and recent history view
+- No real trading, no live routing, no MT5, and no private exchange APIs
+
 ## Current Known Limitations
 
 - Gold macro FRED data depends on `FRED_API_KEY`; without it, FRED inputs stay `NOT_CONFIGURED`.
@@ -189,6 +199,7 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Gold readiness will remain constrained until DXY and Gold spot research inputs are configured and enough snapshot history exists.
 - Gold macro freshness can degrade quickly because CPI and Fed Funds are slower-moving series than BTC data.
 - Data hygiene checks identify issues but do not repair or compact data automatically.
+- Strategy hypotheses are research artifacts only; they are not paper orders, execution signals, or autonomous decisions.
 - Paper trading is simulated-only and disabled by default.
 - Paper fills use persisted latest snapshot prices, not broker or exchange execution.
 - Exploratory paper-signal tuning is available for simulation only and must not be treated as production-ready execution logic.
@@ -204,11 +215,11 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Keep scoring changes conservative until enough snapshot history exists.
 - Consider explicit retention tooling only after approval, with backups and audit logs.
 
-### Phase 2.5
+### Phase 2.6
 
-- Consider richer paper position lifecycle rules after more snapshot history exists.
-- Consider paper performance slicing by regime, profile, or signal family using persisted local data only.
-- Consider read-only review tagging/filtering refinements for journal notes and exports if usage grows.
+- Consider paper forward-testing review that compares persisted strategy hypotheses against later market outcomes.
+- Consider paper performance slicing by regime, profile, strategy family, or readiness bucket using persisted local data only.
+- Consider read-only hypothesis review tagging/filtering refinements if the archive grows.
 
 ### Phase 3.0
 

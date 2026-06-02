@@ -237,6 +237,28 @@ CREATE TABLE IF NOT EXISTS research_readiness_snapshots (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs (id)
 );
+
+CREATE TABLE IF NOT EXISTS strategy_hypotheses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_run_id INTEGER NOT NULL,
+    asset TEXT NOT NULL,
+    hypothesis_name TEXT NOT NULL,
+    direction_bias TEXT NOT NULL,
+    regime TEXT NOT NULL,
+    readiness_score INTEGER NOT NULL,
+    score INTEGER NOT NULL,
+    confidence TEXT NOT NULL,
+    data_completeness INTEGER NOT NULL,
+    hypothesis_status TEXT NOT NULL,
+    suggested_strategy_family TEXT NOT NULL,
+    suggested_holding_period TEXT NOT NULL,
+    reasons_json TEXT NOT NULL,
+    blockers_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    invalidation_notes TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs (id)
+);
 """
 
 

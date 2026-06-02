@@ -147,6 +147,14 @@ class ResearchReadinessConfig:
 
 
 @dataclass(frozen=True)
+class StrategyHypothesisConfig:
+    enabled: bool
+    min_readiness_score: int
+    min_confidence: str
+    allow_watch_when_not_ready: bool
+
+
+@dataclass(frozen=True)
 class GoldSpotProviderConfig:
     enabled: bool
     provider: str
@@ -193,6 +201,7 @@ class AppConfig:
     paper_trading: PaperTradingConfig
     paper_signal: PaperSignalConfig
     research_readiness: ResearchReadinessConfig
+    strategy_hypotheses: StrategyHypothesisConfig
     gold_spot_provider: GoldSpotProviderConfig
     dxy_provider: DxyProviderConfig
 
@@ -229,6 +238,7 @@ def load_config(project_root: Path) -> AppConfig:
     paper_trading_section = raw_config.get("paper_trading", {})
     paper_signal_section = raw_config.get("paper_signal", {})
     research_readiness_section = raw_config.get("research_readiness", {})
+    strategy_hypotheses_section = raw_config.get("strategy_hypotheses", {})
 
     config = AppConfig(
         project_root=project_root,
@@ -273,6 +283,7 @@ def load_config(project_root: Path) -> AppConfig:
         paper_trading=_build_paper_trading_config(paper_trading_section),
         paper_signal=_build_paper_signal_config(paper_signal_section),
         research_readiness=_build_research_readiness_config(research_readiness_section),
+        strategy_hypotheses=_build_strategy_hypotheses_config(strategy_hypotheses_section),
         gold_spot_provider=_build_gold_spot_provider_config(gold_spot_provider_section),
         dxy_provider=_build_dxy_provider_config(dxy_provider_section),
     )
@@ -422,6 +433,13 @@ def validate_config(config: AppConfig) -> None:
             continue
         if value <= 0:
             errors.append(f"research_readiness.stale_after_minutes.{key} must be greater than zero.")
+
+    if config.strategy_hypotheses.min_readiness_score < 0 or config.strategy_hypotheses.min_readiness_score > 100:
+        errors.append("strategy_hypotheses.min_readiness_score must be between 0 and 100.")
+
+    if config.strategy_hypotheses.min_confidence not in ALLOWED_CONFIDENCE_LEVELS:
+        allowed_confidence = ", ".join(sorted(ALLOWED_CONFIDENCE_LEVELS))
+        errors.append(f"strategy_hypotheses.min_confidence must be one of: {allowed_confidence}.")
 
     if config.gold_spot_provider.provider not in ALLOWED_GOLD_SPOT_PROVIDERS:
         errors.append(
@@ -649,6 +667,16 @@ def _build_research_readiness_config(raw_config: object) -> ResearchReadinessCon
         min_snapshots_for_regime=int(section.get("min_snapshots_for_regime", 10)),
         stale_after_minutes=stale_after_minutes,
         min_readiness_score_for_decision=int(section.get("min_readiness_score_for_decision", 70)),
+    )
+
+
+def _build_strategy_hypotheses_config(raw_config: object) -> StrategyHypothesisConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    return StrategyHypothesisConfig(
+        enabled=_as_bool(section.get("enabled", True)),
+        min_readiness_score=int(section.get("min_readiness_score", 70)),
+        min_confidence=_clean_confidence(str(section.get("min_confidence", "Medium"))),
+        allow_watch_when_not_ready=_as_bool(section.get("allow_watch_when_not_ready", True)),
     )
 
 

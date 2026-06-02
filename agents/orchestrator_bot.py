@@ -31,6 +31,7 @@ class OrchestratorBot:
         telegram_service: TelegramService,
         trend_analyzer: TrendAnalyzer,
         research_readiness_analyzer,
+        strategy_hypothesis_engine,
     ) -> None:
         self.config = config
         self.repository = repository
@@ -43,6 +44,7 @@ class OrchestratorBot:
         self.telegram_service = telegram_service
         self.trend_analyzer = trend_analyzer
         self.research_readiness_analyzer = research_readiness_analyzer
+        self.strategy_hypothesis_engine = strategy_hypothesis_engine
 
     def run_daily_brief(self) -> WorkflowOutcome:
         run_date = datetime.now(ZoneInfo(self.config.timezone)).date()
@@ -72,6 +74,18 @@ class OrchestratorBot:
             research_readiness = self.research_readiness_analyzer.analyze_all()
             for readiness_result in research_readiness.values():
                 self.repository.store_research_readiness_snapshot(workflow_run_id, readiness_result)
+            strategy_hypotheses = self.strategy_hypothesis_engine.generate_all(
+                score_results={
+                    "Gold": gold_result,
+                    "BTC": btc_result,
+                },
+                research_readiness=research_readiness,
+                trend_context=trend_context,
+                market_data=market_data,
+                data_quality=data_quality,
+            )
+            for hypothesis in strategy_hypotheses.values():
+                self.repository.store_strategy_hypothesis(workflow_run_id, hypothesis)
 
             report_context = DailyBriefContext(
                 run_date=run_date,
@@ -85,6 +99,7 @@ class OrchestratorBot:
                 system_health=self._build_system_health(market_data),
                 trend_context=trend_context,
                 research_readiness=research_readiness,
+                strategy_hypotheses=strategy_hypotheses,
             )
             report_text = self.report_formatter.format(report_context)
 

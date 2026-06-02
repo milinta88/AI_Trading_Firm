@@ -16,6 +16,7 @@ Phase 2.2 adds configurable paper signal tuning profiles and normalized signal-r
 Phase 2.3 adds paper trade journal notes and local CSV review exports for simulated-only review workflows.
 Phase 2.4 adds market regime classification, research readiness scoring, and explicit no-trade readiness reasons from persisted snapshots only.
 Phase 2.4B adds optional read-only Gold spot and DXY provider inputs plus clearer macro-provider setup guidance.
+Phase 2.5 adds a deterministic strategy hypothesis layer for research review, persistence, dashboard monitoring, and later paper-forward-testing preparation.
 
 This project still does not execute real trades. It does not route live orders, connect to MT5, or connect to private exchange APIs.
 
@@ -155,6 +156,15 @@ See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) f
 - Both providers are disabled by default and return `NOT_CONFIGURED` until explicitly enabled
 - Daily brief, dashboard, and research readiness keep running safely if these providers are disabled, stale, or unavailable
 - These sources are research-only and not broker-grade execution data
+
+## Phase 2.5 Strategy Hypothesis Layer
+
+- Adds deterministic `strategy_hypotheses` config for research-only hypothesis generation
+- Maps score snapshots, research readiness, regime, trend context, market-data health, and data quality into persisted research hypotheses
+- Persists `strategy_hypotheses` rows for BTC and Gold after the normal daily workflow
+- Adds a concise `Strategy Hypotheses` section to the daily brief and `python main.py --paper-report`
+- Adds a dashboard Strategy Hypotheses tab for latest hypotheses and recent history
+- Does not create orders, broker signals, MT5 requests, private exchange API calls, or automatic execution
 
 ## Windows Setup
 

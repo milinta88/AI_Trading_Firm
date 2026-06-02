@@ -66,6 +66,26 @@ class ResearchReadinessResult:
 
 
 @dataclass(frozen=True)
+class StrategyHypothesis:
+    asset: str
+    hypothesis_name: str
+    direction_bias: str
+    regime: str
+    readiness_score: int
+    score: int
+    confidence: str
+    data_completeness: int
+    hypothesis_status: str
+    reasons: list[str]
+    blockers: list[str]
+    warnings: list[str]
+    suggested_strategy_family: str
+    suggested_holding_period: str
+    invalidation_notes: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class DailyBriefContext:
     run_date: date
     mode: str
@@ -78,6 +98,7 @@ class DailyBriefContext:
     system_health: dict[str, str]
     trend_context: dict[str, TrendResult] = field(default_factory=dict)
     research_readiness: dict[str, ResearchReadinessResult] = field(default_factory=dict)
+    strategy_hypotheses: dict[str, StrategyHypothesis] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

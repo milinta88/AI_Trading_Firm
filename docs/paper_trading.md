@@ -221,3 +221,12 @@ Phase 2.4B adds optional read-only Gold DXY and Gold spot inputs for research re
 - These providers can improve Gold completeness and readiness when configured.
 - They do not change paper-trading signal thresholds or simulated execution rules.
 - Public/provider data remains research-only and not broker-grade execution data.
+
+## Phase 2.5 Strategy Hypotheses
+
+Phase 2.5 adds a research-only hypothesis layer that sits before any future paper forward-testing review.
+
+- Hypotheses are deterministic and built from score snapshots, research readiness, trend context, market-data health, and data quality.
+- Hypotheses persist in the local `strategy_hypotheses` table for dashboard and report review.
+- `python main.py --paper-report` can now show the latest persisted BTC and Gold strategy hypotheses.
+- Hypotheses do not create simulated orders by themselves and do not change paper signal thresholds.

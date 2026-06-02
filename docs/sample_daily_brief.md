@@ -88,6 +88,20 @@ Gold:
   - Missing sources: Gold DXY, Gold Spot Price.
   - Readiness score 20 is below the configured minimum 70.
 
+Strategy Hypotheses:
+BTC:
+- Status: WATCH | Direction: SHORT | Family: BTC_SENTIMENT_MEAN_REVERSION
+- Regime: TREND_DOWN | Readiness: 100/100 | Score: 40/100 | Confidence: High
+- Holding Period: 1-3 days
+  - Reason: Fear & Greed is deeply fearful at 22, so a contrarian long or short review must stay hypothesis-only and carefully monitored.
+  - Blocker: Current BTC inputs still need later forward-testing before any paper-strategy promotion.
+Gold:
+- Status: BLOCKED | Direction: NO_TRADE | Family: GOLD_NO_TRADE
+- Regime: INSUFFICIENT_DATA | Readiness: 20/100 | Score: 75/100 | Confidence: Medium
+- Holding Period: Watchlist only
+  - Blocker: Gold regime classification requires at least 10 persisted OK US10Y and real-yield snapshots.
+  - Blocker: Missing sources: Gold DXY, Gold Spot Price.
+
 Macro Regime:
 Neutral
 

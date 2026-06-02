@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from core.models import AnalysisResult, MarketDataPoint, ResearchReadinessResult, RiskStatus
+from core.models import AnalysisResult, MarketDataPoint, ResearchReadinessResult, RiskStatus, StrategyHypothesis
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +222,61 @@ class WorkflowRepository:
                 ),
             )
         logger.info("Stored research readiness snapshot for %s in workflow run %s.", result.asset, workflow_run_id)
+
+    def store_strategy_hypothesis(
+        self,
+        workflow_run_id: int,
+        hypothesis: StrategyHypothesis,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO strategy_hypotheses (
+                    workflow_run_id,
+                    asset,
+                    hypothesis_name,
+                    direction_bias,
+                    regime,
+                    readiness_score,
+                    score,
+                    confidence,
+                    data_completeness,
+                    hypothesis_status,
+                    suggested_strategy_family,
+                    suggested_holding_period,
+                    reasons_json,
+                    blockers_json,
+                    warnings_json,
+                    invalidation_notes,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    workflow_run_id,
+                    hypothesis.asset,
+                    hypothesis.hypothesis_name,
+                    hypothesis.direction_bias,
+                    hypothesis.regime,
+                    hypothesis.readiness_score,
+                    hypothesis.score,
+                    hypothesis.confidence,
+                    hypothesis.data_completeness,
+                    hypothesis.hypothesis_status,
+                    hypothesis.suggested_strategy_family,
+                    hypothesis.suggested_holding_period,
+                    json.dumps(hypothesis.reasons),
+                    json.dumps(hypothesis.blockers),
+                    json.dumps(hypothesis.warnings),
+                    hypothesis.invalidation_notes,
+                    hypothesis.created_at.isoformat(),
+                ),
+            )
+        logger.info(
+            "Stored strategy hypothesis for %s in workflow run %s.",
+            hypothesis.asset,
+            workflow_run_id,
+        )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)

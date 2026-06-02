@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.models import ResearchReadinessResult
+from core.models import ResearchReadinessResult, StrategyHypothesis
 from paper_trading.analytics import PaperAnalyticsReport
 
 
@@ -14,6 +14,7 @@ class PaperTradingReportFormatter:
         report: PaperAnalyticsReport,
         paper_signal_summary: dict[str, Any] | None = None,
         research_readiness: dict[str, ResearchReadinessResult] | None = None,
+        strategy_hypotheses: dict[str, StrategyHypothesis] | None = None,
     ) -> str:
         performance = report.performance
         signal_review = report.signal_review
@@ -150,6 +151,15 @@ class PaperTradingReportFormatter:
                 ]
             )
 
+        if strategy_hypotheses:
+            lines.extend(
+                [
+                    "",
+                    "Strategy Hypotheses:",
+                    *_format_strategy_hypotheses(strategy_hypotheses),
+                ]
+            )
+
         if report.latest_run_summary:
             lines.extend(
                 [
@@ -205,4 +215,39 @@ def _format_research_readiness(
         if readiness.no_trade_reasons:
             lines.append("- No-Trade Readiness Reasons:")
             lines.extend(f"  - {reason}" for reason in readiness.no_trade_reasons)
+    return lines or ["- Not available yet."]
+
+
+def _format_strategy_hypotheses(
+    hypotheses_by_asset: dict[str, StrategyHypothesis],
+) -> list[str]:
+    lines: list[str] = []
+    for asset in ("BTC", "Gold"):
+        hypothesis = hypotheses_by_asset.get(asset)
+        if hypothesis is None:
+            continue
+        lines.extend(
+            [
+                f"{asset}:",
+                (
+                    f"- Status: {hypothesis.hypothesis_status} | Direction: {hypothesis.direction_bias} | "
+                    f"Family: {hypothesis.suggested_strategy_family}"
+                ),
+                (
+                    f"- Regime: {hypothesis.regime} | Readiness: {hypothesis.readiness_score}/100 | "
+                    f"Score: {hypothesis.score}/100 | Confidence: {hypothesis.confidence}"
+                ),
+                f"- Holding Period: {hypothesis.suggested_holding_period}",
+            ]
+        )
+        if hypothesis.reasons:
+            lines.append("Reasons:")
+            lines.extend(f"- {reason}" for reason in hypothesis.reasons[:3])
+        if hypothesis.blockers:
+            lines.append("Blockers:")
+            lines.extend(f"- {blocker}" for blocker in hypothesis.blockers[:3])
+        if hypothesis.warnings:
+            lines.append("Warnings:")
+            lines.extend(f"- {warning}" for warning in hypothesis.warnings[:3])
+        lines.append(f"Invalidation Notes: {hypothesis.invalidation_notes}")
     return lines or ["- Not available yet."]

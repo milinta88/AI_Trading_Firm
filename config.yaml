@@ -101,3 +101,9 @@ research_readiness:
     fear_and_greed: 1440
     gold_macro: 4320
   min_readiness_score_for_decision: 70
+
+strategy_hypotheses:
+  enabled: true
+  min_readiness_score: 70
+  min_confidence: Medium
+  allow_watch_when_not_ready: true

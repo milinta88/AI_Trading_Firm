@@ -100,6 +100,7 @@ def test_dashboard_render_functions_handle_empty_dashboard_data(monkeypatch) -> 
     dashboard_app._render_market_snapshots(data, filters)
     dashboard_app._render_trend_context(data, filters)
     dashboard_app._render_research_readiness(data)
+    dashboard_app._render_strategy_hypotheses(data, filters)
     dashboard_app._render_score_snapshots(data, filters)
     dashboard_app._render_daily_brief(data)
     dashboard_app._render_report_archive(data)
@@ -108,6 +109,7 @@ def test_dashboard_render_functions_handle_empty_dashboard_data(monkeypatch) -> 
     dashboard_app._render_safety_view(data)
 
     assert "Research readiness is disabled in config." in fake_st.infos
+    assert "Strategy hypotheses are disabled in config." in fake_st.infos
     assert "SIMULATED ONLY - NO REAL TRADING - WATCH ONLY" in fake_st.errors
     assert "EXECUTION DISABLED" in fake_st.errors
 

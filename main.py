@@ -11,6 +11,7 @@ from agents.data_quality_bot import DataQualityBot
 from agents.gold_fundamental_bot import GoldFundamentalBot
 from agents.orchestrator_bot import OrchestratorBot
 from analytics.research_readiness import ResearchReadinessAnalyzer
+from analytics.strategy_hypothesis import StrategyHypothesisEngine
 from analytics.trend_analyzer import TrendAnalyzer
 from agents.risk_officer_bot import RiskOfficerBot
 from core.config import AppConfig, RuntimeOptions, TelegramRuntimeSettings, load_config, resolve_telegram_runtime
@@ -122,6 +123,9 @@ def build_orchestrator(config: AppConfig, telegram_runtime: TelegramRuntimeSetti
             database_path=config.database_path,
             config=config.research_readiness,
         ),
+        strategy_hypothesis_engine=StrategyHypothesisEngine(
+            config=config.strategy_hypotheses,
+        ),
     )
 
 
@@ -232,10 +236,15 @@ def build_paper_report(config: AppConfig) -> str:
         config=config.research_readiness,
     ).analyze_all()
     formatter = PaperTradingReportFormatter()
+    strategy_hypotheses = StrategyHypothesisEngine(
+        config=config.strategy_hypotheses,
+        database_path=config.database_path,
+    ).load_latest()
     return formatter.format(
         analytics,
         paper_signal_summary=asdict(config.paper_signal),
         research_readiness=research_readiness,
+        strategy_hypotheses=strategy_hypotheses,
     )
 
 

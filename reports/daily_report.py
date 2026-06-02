@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.models import DailyBriefContext, MarketDataPoint, ResearchReadinessResult, TrendResult
+from core.models import DailyBriefContext, MarketDataPoint, ResearchReadinessResult, StrategyHypothesis, TrendResult
 from scoring.models import ScoreComponent
 
 
@@ -75,6 +75,9 @@ class DailyReportFormatter:
             "",
             "Market Regime And Data Readiness:",
             *self._format_readiness_section(brief.research_readiness),
+            "",
+            "Strategy Hypotheses:",
+            *self._format_strategy_hypotheses(brief.strategy_hypotheses),
             "",
             "Macro Regime:",
             brief.macro_regime,
@@ -177,6 +180,41 @@ class DailyReportFormatter:
             if readiness.no_trade_reasons:
                 lines.append("- No-Trade Readiness Reasons:")
                 lines.extend(f"  - {reason}" for reason in readiness.no_trade_reasons)
+        return lines
+
+    @staticmethod
+    def _format_strategy_hypotheses(
+        hypotheses_by_asset: dict[str, StrategyHypothesis],
+    ) -> list[str]:
+        if not hypotheses_by_asset:
+            return ["- Not available yet."]
+
+        lines: list[str] = []
+        for asset in ("BTC", "Gold"):
+            hypothesis = hypotheses_by_asset.get(asset)
+            if hypothesis is None:
+                lines.append(f"{asset}: NOT_AVAILABLE")
+                continue
+            lines.extend(
+                [
+                    f"{asset}:",
+                    (
+                        f"- Status: {hypothesis.hypothesis_status} | Direction: {hypothesis.direction_bias} | "
+                        f"Family: {hypothesis.suggested_strategy_family}"
+                    ),
+                    (
+                        f"- Regime: {hypothesis.regime} | Readiness: {hypothesis.readiness_score}/100 | "
+                        f"Score: {hypothesis.score}/100 | Confidence: {hypothesis.confidence}"
+                    ),
+                    f"- Holding Period: {hypothesis.suggested_holding_period}",
+                ]
+            )
+            for reason in hypothesis.reasons[:2]:
+                lines.append(f"  - Reason: {reason}")
+            for blocker in hypothesis.blockers[:2]:
+                lines.append(f"  - Blocker: {blocker}")
+            for warning in hypothesis.warnings[:2]:
+                lines.append(f"  - Warning: {warning}")
         return lines
 
     @staticmethod

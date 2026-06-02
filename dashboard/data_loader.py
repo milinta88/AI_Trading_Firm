@@ -86,6 +86,7 @@ class DashboardData:
     paper_trading_enabled: bool = False
     paper_trading_starting_equity: float = 10_000.0
     research_readiness_min_score: int = 70
+    strategy_hypotheses_enabled: bool = False
     latest_workflow_run: dict[str, Any] | None = None
     latest_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
     recent_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
@@ -127,6 +128,8 @@ class DashboardData:
     paper_journal_notes: list[dict[str, Any]] = field(default_factory=list)
     latest_research_readiness: list[dict[str, Any]] = field(default_factory=list)
     recent_research_readiness: list[dict[str, Any]] = field(default_factory=list)
+    latest_strategy_hypotheses: list[dict[str, Any]] = field(default_factory=list)
+    recent_strategy_hypotheses: list[dict[str, Any]] = field(default_factory=list)
     paper_signal_config: dict[str, Any] | None = field(
         default_factory=lambda: _default_paper_signal_config("conservative")
     )
@@ -141,6 +144,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
         paper_trading_starting_equity,
         paper_signal_config,
         research_readiness_config,
+        strategy_hypotheses_enabled,
         database_path,
     ) = load_dashboard_config(project_root)
 
@@ -152,6 +156,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             paper_trading_starting_equity=paper_trading_starting_equity,
             research_readiness_enabled=research_readiness_config.enabled,
             research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
+            strategy_hypotheses_enabled=strategy_hypotheses_enabled,
             paper_signal_config=paper_signal_config,
             message=f"Database not found at {database_path}. Run python main.py --dry-run first.",
         )
@@ -171,6 +176,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 connection=connection,
                 limit=limit,
             )
+            latest_strategy_hypotheses = _fetch_latest_strategy_hypotheses(connection)
+            recent_strategy_hypotheses = _fetch_recent_strategy_hypotheses(connection, limit)
             return DashboardData(
                 database_available=True,
                 database_message=f"Connected read-only to {database_path}.",
@@ -181,6 +188,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 paper_trading_starting_equity=paper_trading_starting_equity,
                 research_readiness_enabled=research_readiness_config.enabled,
                 research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
+                strategy_hypotheses_enabled=strategy_hypotheses_enabled,
                 paper_signal_config=paper_signal_config,
                 latest_workflow_run=_fetch_latest_workflow_run(connection),
                 latest_market_snapshots=latest_market_snapshots,
@@ -221,6 +229,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 paper_journal_notes=_fetch_recent_paper_journal_notes(connection, limit),
                 latest_research_readiness=readiness_report["latest"],
                 recent_research_readiness=readiness_report["recent"],
+                latest_strategy_hypotheses=latest_strategy_hypotheses,
+                recent_strategy_hypotheses=recent_strategy_hypotheses,
             )
     except sqlite3.Error as exc:
         return _empty_dashboard_data(
@@ -230,6 +240,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             paper_trading_starting_equity=paper_trading_starting_equity,
             research_readiness_enabled=research_readiness_config.enabled,
             research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
+            strategy_hypotheses_enabled=strategy_hypotheses_enabled,
             paper_signal_config=paper_signal_config,
             message=f"Unable to read dashboard database: {exc}",
         )
@@ -237,7 +248,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
 
 def load_dashboard_config(
     project_root: Path,
-) -> tuple[str, bool, bool, float, dict[str, Any], ResearchReadinessConfig, Path]:
+) -> tuple[str, bool, bool, float, dict[str, Any], ResearchReadinessConfig, bool, Path]:
     config_path = project_root / "config.yaml"
     if not config_path.exists():
         return (
@@ -247,6 +258,7 @@ def load_dashboard_config(
             10_000.0,
             _default_paper_signal_config(),
             _default_research_readiness_config(),
+            False,
             project_root / "data" / "database.db",
         )
 
@@ -261,6 +273,7 @@ def load_dashboard_config(
             10_000.0,
             _default_paper_signal_config(),
             _default_research_readiness_config(),
+            False,
             project_root / "data" / "database.db",
         )
 
@@ -269,6 +282,7 @@ def load_dashboard_config(
     paper_trading_section = raw_config.get("paper_trading", {})
     paper_signal_section = raw_config.get("paper_signal", {})
     research_readiness_section = raw_config.get("research_readiness", {})
+    strategy_hypotheses_section = raw_config.get("strategy_hypotheses", {})
     database_section = raw_config.get("database", {})
     database_path = Path(str(database_section.get("path", "data/database.db")))
     if not database_path.is_absolute():
@@ -282,6 +296,7 @@ def load_dashboard_config(
             float(paper_trading_section.get("starting_equity", 10_000)),
             _load_paper_signal_config(paper_signal_section),
             _load_research_readiness_config(research_readiness_section),
+            _as_bool(strategy_hypotheses_section.get("enabled", False)),
             database_path,
         )
     except Exception:
@@ -292,6 +307,7 @@ def load_dashboard_config(
             10_000.0,
             _default_paper_signal_config(),
             _default_research_readiness_config(),
+            False,
             database_path,
         )
 
@@ -432,6 +448,7 @@ def _empty_dashboard_data(
     paper_trading_starting_equity: float,
     research_readiness_enabled: bool,
     research_readiness_min_score: int,
+    strategy_hypotheses_enabled: bool,
     paper_signal_config: dict[str, Any],
     message: str,
 ) -> DashboardData:
@@ -446,6 +463,7 @@ def _empty_dashboard_data(
         paper_trading_starting_equity=paper_trading_starting_equity,
         research_readiness_enabled=research_readiness_enabled,
         research_readiness_min_score=research_readiness_min_score,
+        strategy_hypotheses_enabled=strategy_hypotheses_enabled,
         paper_signal_config=paper_signal_config,
         paper_analytics_summary=_default_paper_analytics_summary(paper_trading_starting_equity),
         paper_signal_review_summary=_default_paper_signal_review_summary(
@@ -850,6 +868,38 @@ def _parse_research_readiness_snapshot(row: dict[str, Any]) -> dict[str, Any]:
     parsed["missing_sources"] = parse_json_value(row.get("missing_sources_json"), fallback=[])
     parsed["warnings"] = parse_json_value(row.get("warnings_json"), fallback=[])
     parsed["no_trade_reasons"] = parse_json_value(row.get("no_trade_reasons_json"), fallback=[])
+    return parsed
+
+
+def _fetch_latest_strategy_hypotheses(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+    if not _table_exists(connection, "strategy_hypotheses"):
+        return []
+
+    rows = _fetch_all(connection, "SELECT * FROM strategy_hypotheses ORDER BY id DESC")
+    latest_by_asset: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        asset = str(row.get("asset") or "UNKNOWN")
+        if asset not in latest_by_asset:
+            latest_by_asset[asset] = _parse_strategy_hypothesis_snapshot(row)
+    return list(latest_by_asset.values())
+
+
+def _fetch_recent_strategy_hypotheses(connection: sqlite3.Connection, limit: int) -> list[dict[str, Any]]:
+    if not _table_exists(connection, "strategy_hypotheses"):
+        return []
+    rows = _fetch_all(
+        connection,
+        "SELECT * FROM strategy_hypotheses ORDER BY id DESC LIMIT ?",
+        (limit,),
+    )
+    return [_parse_strategy_hypothesis_snapshot(row) for row in rows]
+
+
+def _parse_strategy_hypothesis_snapshot(row: dict[str, Any]) -> dict[str, Any]:
+    parsed = dict(row)
+    parsed["reasons"] = parse_json_value(row.get("reasons_json"), fallback=[])
+    parsed["blockers"] = parse_json_value(row.get("blockers_json"), fallback=[])
+    parsed["warnings"] = parse_json_value(row.get("warnings_json"), fallback=[])
     return parsed
 
 
