@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import MISSING
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,22 @@ from paper_trading.repository import PaperTradingRepository
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_DASHBOARD_DATA_ALIASES: dict[str, tuple[str, ...]] = {
+    "app_mode": ("system_mode",),
+    "latest_market_snapshots": ("market_snapshots",),
+    "recent_market_snapshots": ("market_snapshots",),
+    "latest_score_snapshots": ("score_snapshots",),
+    "recent_score_snapshots": ("score_snapshots",),
+    "trend_results": ("trend_context",),
+    "latest_report_text": ("latest_daily_brief",),
+    "recent_messages": ("outbound_messages",),
+    "paper_signal_review_summary": ("paper_review_summary",),
+    "paper_recent_signal_reviews": ("paper_signal_reviews", "paper_recent_reviews"),
+    "paper_recent_run_summaries": ("paper_run_summaries",),
+    "paper_analytics_summary": ("paper_performance_summary",),
+    "latest_research_readiness": ("research_readiness_latest",),
+    "recent_research_readiness": ("research_readiness_history",),
+}
 
 
 def main() -> None:
@@ -23,7 +40,7 @@ def main() -> None:
     )
 
     limit_rows = st.sidebar.slider("Limit rows", min_value=10, max_value=500, value=100, step=10)
-    data = load_dashboard_data(PROJECT_ROOT, limit=limit_rows)
+    data = _coerce_dashboard_data(load_dashboard_data(PROJECT_ROOT, limit=limit_rows))
     filters = _render_sidebar_filters(data, limit_rows)
 
     st.title("AI Trading Firm Dashboard")
@@ -75,6 +92,7 @@ def main() -> None:
 
 
 def _render_sidebar_filters(data: DashboardData, limit_rows: int) -> dict[str, Any]:
+    data = _coerce_dashboard_data(data)
     st.sidebar.header("Filters")
     st.sidebar.caption("Filters affect dashboard tables, charts, and CSV exports only.")
 
@@ -147,6 +165,7 @@ def _coerce_date(raw_value: Any) -> date | None:
 
 
 def _render_status_header(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     status = "EXECUTION DISABLED" if not data.execution_enabled else "CONFIG ERROR: EXECUTION FLAG ENABLED"
     col_mode, col_execution, col_paper, col_database = st.columns(4)
     col_mode.metric("System Mode", data.app_mode.title())
@@ -156,6 +175,7 @@ def _render_status_header(data: DashboardData) -> None:
 
 
 def _render_overview(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Latest Workflow Run")
     if data.latest_workflow_run:
         _render_key_value_grid(
@@ -195,6 +215,7 @@ def _render_overview(data: DashboardData) -> None:
 
 
 def _render_market_snapshots(data: DashboardData, filters: dict[str, Any]) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Latest Market Data Snapshot")
     latest_rows = _market_rows(
         filter_rows(
@@ -231,6 +252,7 @@ def _render_market_snapshots(data: DashboardData, filters: dict[str, Any]) -> No
 
 
 def _render_score_snapshots(data: DashboardData, filters: dict[str, Any]) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Latest Score Snapshot By Asset")
     latest_score_snapshots = filter_rows(
         data.latest_score_snapshots,
@@ -294,6 +316,7 @@ def _render_score_snapshots(data: DashboardData, filters: dict[str, Any]) -> Non
 
 
 def _render_trend_context(data: DashboardData, filters: dict[str, Any]) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Latest-vs-Previous Trend Context")
     if not data.trend_results:
         st.info("No trend context is available yet.")
@@ -352,6 +375,7 @@ def _render_trend_context(data: DashboardData, filters: dict[str, Any]) -> None:
 
 
 def _render_daily_brief(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Latest Generated Daily Brief")
     if data.latest_report_text:
         st.text_area("Daily Brief", data.latest_report_text, height=600)
@@ -363,16 +387,18 @@ def _render_daily_brief(data: DashboardData) -> None:
 
 
 def _render_research_readiness(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Research Readiness")
     st.caption(
         "Read-only decision-readiness foundation built from persisted market snapshots and trend history only. "
         "No execution logic is enabled."
     )
 
-    if not data.research_readiness_enabled:
+    if not getattr(data, "research_readiness_enabled", False):
         st.info("Research readiness is disabled in config.")
         return
 
+    min_score = int(getattr(data, "research_readiness_min_score", 70) or 70)
     latest_rows = data.latest_research_readiness
     if not latest_rows:
         st.info("No research readiness data is available yet.")
@@ -383,8 +409,8 @@ def _render_research_readiness(data: DashboardData) -> None:
     gold = readiness_by_asset.get("Gold")
     if btc or gold:
         col_btc, col_gold = st.columns(2)
-        _render_readiness_card(col_btc, btc, data.research_readiness_min_score)
-        _render_readiness_card(col_gold, gold, data.research_readiness_min_score)
+        _render_readiness_card(col_btc, btc, min_score)
+        _render_readiness_card(col_gold, gold, min_score)
 
     st.markdown("#### Latest Readiness Snapshot")
     _render_table(
@@ -403,7 +429,7 @@ def _render_research_readiness(data: DashboardData) -> None:
                 "Regime": row.get("regime"),
                 "Readiness Score": f"{row.get('readiness_score')}/100",
                 "Decision Ready": "YES" if row.get("decision_ready") else "NO",
-                "Minimum Score": f"{data.research_readiness_min_score}/100",
+                "Minimum Score": f"{min_score}/100",
                 "Data Completeness": f"{row.get('data_completeness')}%",
             }
         )
@@ -420,6 +446,7 @@ def _render_research_readiness(data: DashboardData) -> None:
 
 
 def _render_report_archive(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Report Archive")
     st.caption("Read-only search over persisted daily brief text and outbound message previews.")
 
@@ -571,6 +598,7 @@ def _short_text(value: str, max_length: int) -> str:
 
 
 def _render_data_hygiene(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Data Hygiene")
     st.caption("Read-only checks over persisted market and score snapshots. Phase 1.9 does not delete or compact data.")
 
@@ -607,6 +635,7 @@ def _render_data_hygiene(data: DashboardData) -> None:
 
 
 def _render_paper_trading(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Paper Trading")
     st.error("SIMULATED ONLY - NO REAL TRADING - WATCH ONLY")
     st.caption("Paper trading reads local SQLite state only. It does not route orders or call MT5/exchange trading APIs.")
@@ -766,6 +795,7 @@ def _render_paper_trading(data: DashboardData) -> None:
 
 
 def _render_paper_review_exports(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.markdown("#### Paper Review Exports")
     st.caption("Read-only CSV exports from local SQLite paper-review data only.")
 
@@ -802,6 +832,7 @@ def _render_paper_review_exports(data: DashboardData) -> None:
 
 
 def _render_paper_journal(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.markdown("#### Paper Trade Journal")
     st.caption("Local review notes only. Adding a note does not change simulated orders, positions, or thresholds.")
 
@@ -861,6 +892,7 @@ def _render_paper_journal(data: DashboardData) -> None:
 
 
 def _render_safety_view(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
     st.subheader("Safety And Risk")
     st.error("EXECUTION DISABLED")
     st.write("This dashboard is monitoring only. It does not place orders or change trading state.")
@@ -1083,6 +1115,7 @@ def _optional_text(value: str | None) -> str | None:
 
 
 def _paper_profile_options(data: DashboardData) -> list[str]:
+    data = _coerce_dashboard_data(data)
     options = {
         "conservative",
         "balanced",
@@ -1096,6 +1129,43 @@ def _paper_profile_options(data: DashboardData) -> list[str]:
         if profile:
             options.add(profile)
     return sorted(options)
+
+
+def _coerce_dashboard_data(data: DashboardData | Any) -> DashboardData:
+    if isinstance(data, DashboardData):
+        return data
+
+    values: dict[str, Any] = {}
+    for field_name, field_def in DashboardData.__dataclass_fields__.items():
+        if hasattr(data, field_name):
+            values[field_name] = getattr(data, field_name)
+            continue
+
+        alias_value = _dashboard_alias_value(data, field_name)
+        if alias_value is not MISSING:
+            values[field_name] = alias_value
+            continue
+
+        if field_def.default_factory is not MISSING:
+            values[field_name] = field_def.default_factory()
+        elif field_def.default is not MISSING:
+            values[field_name] = field_def.default
+        else:
+            values[field_name] = None
+
+    return DashboardData(**values)
+
+
+def _dashboard_alias_value(data: Any, field_name: str) -> Any:
+    if field_name == "database_available" and hasattr(data, "sqlite_status"):
+        return str(getattr(data, "sqlite_status")).strip().upper() == "OK"
+    if field_name == "database_message" and hasattr(data, "sqlite_status"):
+        return f"SQLite: {getattr(data, 'sqlite_status')}"
+
+    for alias in _DASHBOARD_DATA_ALIASES.get(field_name, ()):
+        if hasattr(data, alias):
+            return getattr(data, alias)
+    return MISSING
 
 
 def _render_market_charts(chart_rows: list[dict[str, Any]]) -> None:

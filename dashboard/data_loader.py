@@ -23,59 +23,114 @@ from core.config import (
 from paper_trading.analytics import PaperAnalytics
 
 
+def _default_data_hygiene_summary() -> dict[str, Any]:
+    return {
+        "total_market_snapshots": 0,
+        "total_score_snapshots": 0,
+        "latest_market_snapshot_timestamp": None,
+        "latest_score_snapshot_timestamp": None,
+        "warning_count": 0,
+        "fail_count": 0,
+    }
+
+
+def _default_paper_analytics_summary(starting_equity: float = 10_000.0) -> dict[str, Any]:
+    return {
+        "starting_equity": starting_equity,
+        "latest_equity": starting_equity,
+        "total_pnl_abs": 0.0,
+        "total_pnl_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "total_orders": 0,
+        "open_positions": 0,
+        "closed_positions": 0,
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "gross_profit": 0.0,
+        "gross_loss": 0.0,
+        "profit_factor": None,
+        "average_pnl": 0.0,
+        "average_r_multiple": None,
+    }
+
+
+def _default_paper_signal_review_summary(profile: str = "conservative") -> dict[str, Any]:
+    return {
+        "signals_evaluated": 0,
+        "signals_accepted": 0,
+        "signals_rejected": 0,
+        "no_trade_count": 0,
+        "accepted_by_asset": {},
+        "rejected_by_reason": {},
+        "rejected_by_asset": {},
+        "no_trade_by_reason": {},
+        "no_trade_by_asset": {},
+        "accepted_by_profile": {},
+        "no_trade_by_profile": {},
+        "active_profile": profile,
+        "source_mode": "none",
+        "legacy_signal_events_ignored": 0,
+        "notes": [],
+    }
+
+
 @dataclass(frozen=True)
 class DashboardData:
-    database_available: bool
-    database_message: str
-    database_path: Path | None
-    app_mode: str
-    execution_enabled: bool
-    paper_trading_enabled: bool
-    paper_trading_starting_equity: float
-    research_readiness_enabled: bool
-    research_readiness_min_score: int
-    latest_workflow_run: dict[str, Any] | None
-    latest_market_snapshots: list[dict[str, Any]]
-    recent_market_snapshots: list[dict[str, Any]]
-    latest_score_snapshots: list[dict[str, Any]]
-    recent_score_snapshots: list[dict[str, Any]]
-    latest_risk_snapshot: dict[str, Any] | None
-    latest_report_text: str | None
-    recent_messages: list[dict[str, Any]]
-    recent_workflow_runs: list[dict[str, Any]]
-    system_health: dict[str, str]
-    trend_results: list[dict[str, Any]]
-    multi_point_trends: list[dict[str, Any]]
-    market_chart_rows: list[dict[str, Any]]
-    score_chart_rows: list[dict[str, Any]]
-    archive_latest_report: dict[str, Any] | None
-    archive_recent_reports: list[dict[str, Any]]
-    archive_recent_messages: list[dict[str, Any]]
-    archive_items: list[dict[str, Any]]
-    data_hygiene_overall_status: str
-    data_hygiene_summary: dict[str, Any]
-    data_hygiene_status_distribution: list[dict[str, Any]]
-    data_hygiene_checks: list[dict[str, Any]]
-    paper_latest_equity: dict[str, Any] | None
-    paper_open_positions: list[dict[str, Any]]
-    paper_recent_orders: list[dict[str, Any]]
-    paper_recent_risk_events: list[dict[str, Any]]
-    paper_equity_curve: list[dict[str, Any]]
-    paper_closed_positions: list[dict[str, Any]]
-    paper_latest_run_summary: dict[str, Any] | None
-    paper_recent_run_summaries: list[dict[str, Any]]
-    paper_analytics_summary: dict[str, Any]
-    paper_signal_review_summary: dict[str, Any]
-    paper_pnl_by_asset: list[dict[str, Any]]
-    paper_rejection_reasons: list[dict[str, Any]]
-    paper_no_trade_reasons: list[dict[str, Any]]
-    paper_recent_signal_reviews: list[dict[str, Any]]
-    paper_journal_notes: list[dict[str, Any]]
-    latest_research_readiness: list[dict[str, Any]]
-    recent_research_readiness: list[dict[str, Any]]
+    database_available: bool = False
+    database_message: str = ""
+    database_path: Path | None = None
+    app_mode: str = "research"
+    execution_enabled: bool = False
+    paper_trading_enabled: bool = False
+    paper_trading_starting_equity: float = 10_000.0
+    research_readiness_min_score: int = 70
+    latest_workflow_run: dict[str, Any] | None = None
+    latest_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
+    recent_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
+    latest_score_snapshots: list[dict[str, Any]] = field(default_factory=list)
+    recent_score_snapshots: list[dict[str, Any]] = field(default_factory=list)
+    latest_risk_snapshot: dict[str, Any] | None = None
+    latest_report_text: str | None = None
+    recent_messages: list[dict[str, Any]] = field(default_factory=list)
+    recent_workflow_runs: list[dict[str, Any]] = field(default_factory=list)
+    system_health: dict[str, str] = field(default_factory=dict)
+    trend_results: list[dict[str, Any]] = field(default_factory=list)
+    multi_point_trends: list[dict[str, Any]] = field(default_factory=list)
+    market_chart_rows: list[dict[str, Any]] = field(default_factory=list)
+    score_chart_rows: list[dict[str, Any]] = field(default_factory=list)
+    archive_latest_report: dict[str, Any] | None = None
+    archive_recent_reports: list[dict[str, Any]] = field(default_factory=list)
+    archive_recent_messages: list[dict[str, Any]] = field(default_factory=list)
+    archive_items: list[dict[str, Any]] = field(default_factory=list)
+    data_hygiene_overall_status: str = "NOT_AVAILABLE"
+    data_hygiene_summary: dict[str, Any] = field(default_factory=_default_data_hygiene_summary)
+    data_hygiene_status_distribution: list[dict[str, Any]] = field(default_factory=list)
+    data_hygiene_checks: list[dict[str, Any]] = field(default_factory=list)
+    paper_latest_equity: dict[str, Any] | None = None
+    paper_open_positions: list[dict[str, Any]] = field(default_factory=list)
+    paper_recent_orders: list[dict[str, Any]] = field(default_factory=list)
+    paper_recent_risk_events: list[dict[str, Any]] = field(default_factory=list)
+    paper_equity_curve: list[dict[str, Any]] = field(default_factory=list)
+    paper_closed_positions: list[dict[str, Any]] = field(default_factory=list)
+    paper_latest_run_summary: dict[str, Any] | None = None
+    paper_recent_run_summaries: list[dict[str, Any]] = field(default_factory=list)
+    paper_analytics_summary: dict[str, Any] = field(default_factory=_default_paper_analytics_summary)
+    paper_signal_review_summary: dict[str, Any] = field(
+        default_factory=_default_paper_signal_review_summary
+    )
+    paper_pnl_by_asset: list[dict[str, Any]] = field(default_factory=list)
+    paper_rejection_reasons: list[dict[str, Any]] = field(default_factory=list)
+    paper_no_trade_reasons: list[dict[str, Any]] = field(default_factory=list)
+    paper_recent_signal_reviews: list[dict[str, Any]] = field(default_factory=list)
+    paper_journal_notes: list[dict[str, Any]] = field(default_factory=list)
+    latest_research_readiness: list[dict[str, Any]] = field(default_factory=list)
+    recent_research_readiness: list[dict[str, Any]] = field(default_factory=list)
     paper_signal_config: dict[str, Any] | None = field(
         default_factory=lambda: _default_paper_signal_config("conservative")
     )
+    research_readiness_enabled: bool = False
 
 
 def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
@@ -392,86 +447,10 @@ def _empty_dashboard_data(
         research_readiness_enabled=research_readiness_enabled,
         research_readiness_min_score=research_readiness_min_score,
         paper_signal_config=paper_signal_config,
-        latest_workflow_run=None,
-        latest_market_snapshots=[],
-        recent_market_snapshots=[],
-        latest_score_snapshots=[],
-        recent_score_snapshots=[],
-        latest_risk_snapshot=None,
-        latest_report_text=None,
-        recent_messages=[],
-        recent_workflow_runs=[],
-        system_health={},
-        trend_results=[],
-        multi_point_trends=[],
-        market_chart_rows=[],
-        score_chart_rows=[],
-        archive_latest_report=None,
-        archive_recent_reports=[],
-        archive_recent_messages=[],
-        archive_items=[],
-        data_hygiene_overall_status="NOT_AVAILABLE",
-        data_hygiene_summary={
-            "total_market_snapshots": 0,
-            "total_score_snapshots": 0,
-            "latest_market_snapshot_timestamp": None,
-            "latest_score_snapshot_timestamp": None,
-            "warning_count": 0,
-            "fail_count": 0,
-        },
-        data_hygiene_status_distribution=[],
-        data_hygiene_checks=[],
-        paper_latest_equity=None,
-        paper_open_positions=[],
-        paper_recent_orders=[],
-        paper_recent_risk_events=[],
-        paper_equity_curve=[],
-        paper_closed_positions=[],
-        paper_latest_run_summary=None,
-        paper_recent_run_summaries=[],
-        paper_analytics_summary={
-            "starting_equity": paper_trading_starting_equity,
-            "latest_equity": paper_trading_starting_equity,
-            "total_pnl_abs": 0.0,
-            "total_pnl_pct": 0.0,
-            "max_drawdown_pct": 0.0,
-            "total_orders": 0,
-            "open_positions": 0,
-            "closed_positions": 0,
-            "total_trades": 0,
-            "winning_trades": 0,
-            "losing_trades": 0,
-            "win_rate": 0.0,
-            "gross_profit": 0.0,
-            "gross_loss": 0.0,
-            "profit_factor": None,
-            "average_pnl": 0.0,
-            "average_r_multiple": None,
-        },
-        paper_signal_review_summary={
-            "signals_evaluated": 0,
-            "signals_accepted": 0,
-            "signals_rejected": 0,
-            "no_trade_count": 0,
-            "accepted_by_asset": {},
-            "rejected_by_reason": {},
-            "rejected_by_asset": {},
-            "no_trade_by_reason": {},
-            "no_trade_by_asset": {},
-            "accepted_by_profile": {},
-            "no_trade_by_profile": {},
-            "active_profile": paper_signal_config.get("profile"),
-            "source_mode": "none",
-            "legacy_signal_events_ignored": 0,
-            "notes": [],
-        },
-        paper_pnl_by_asset=[],
-        paper_rejection_reasons=[],
-        paper_no_trade_reasons=[],
-        paper_recent_signal_reviews=[],
-        paper_journal_notes=[],
-        latest_research_readiness=[],
-        recent_research_readiness=[],
+        paper_analytics_summary=_default_paper_analytics_summary(paper_trading_starting_equity),
+        paper_signal_review_summary=_default_paper_signal_review_summary(
+            str(paper_signal_config.get("profile") or "conservative")
+        ),
     )
 
 
@@ -559,7 +538,7 @@ def _load_research_readiness_config(raw_config: object) -> ResearchReadinessConf
             stale_after_minutes[key] = int(raw_stale_after.get(key, default_value))
 
     return ResearchReadinessConfig(
-        enabled=_as_bool(section.get("enabled", True)),
+        enabled=_as_bool(section.get("enabled", False)),
         min_snapshots_for_regime=int(section.get("min_snapshots_for_regime", 10)),
         stale_after_minutes=stale_after_minutes,
         min_readiness_score_for_decision=int(section.get("min_readiness_score_for_decision", 70)),
@@ -584,7 +563,7 @@ def _default_paper_signal_config(profile: str = "conservative") -> dict[str, Any
 
 def _default_research_readiness_config() -> ResearchReadinessConfig:
     return ResearchReadinessConfig(
-        enabled=True,
+        enabled=False,
         min_snapshots_for_regime=10,
         stale_after_minutes=dict(DEFAULT_RESEARCH_STALE_AFTER_MINUTES),
         min_readiness_score_for_decision=70,
