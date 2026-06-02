@@ -259,6 +259,32 @@ CREATE TABLE IF NOT EXISTS strategy_hypotheses (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs (id)
 );
+
+CREATE TABLE IF NOT EXISTS strategy_hypothesis_outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hypothesis_id INTEGER NOT NULL,
+    workflow_run_id INTEGER NOT NULL,
+    asset TEXT NOT NULL,
+    hypothesis_name TEXT NOT NULL,
+    direction_bias TEXT NOT NULL,
+    strategy_family TEXT NOT NULL,
+    horizon_hours INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    evaluated_at TEXT NOT NULL,
+    entry_reference_price REAL,
+    followup_price REAL,
+    move_pct REAL,
+    max_favorable_move_pct REAL,
+    max_adverse_move_pct REAL,
+    outcome_status TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    FOREIGN KEY (hypothesis_id) REFERENCES strategy_hypotheses (id),
+    FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_strategy_hypothesis_outcomes_hypothesis_horizon
+ON strategy_hypothesis_outcomes (hypothesis_id, horizon_hours);
 """
 
 

@@ -10,6 +10,7 @@ from agents.btc_fundamental_bot import BTCFundamentalBot
 from agents.data_quality_bot import DataQualityBot
 from agents.gold_fundamental_bot import GoldFundamentalBot
 from agents.orchestrator_bot import OrchestratorBot
+from analytics.hypothesis_outcomes import HypothesisOutcomeEvaluator
 from analytics.research_readiness import ResearchReadinessAnalyzer
 from analytics.strategy_hypothesis import StrategyHypothesisEngine
 from analytics.trend_analyzer import TrendAnalyzer
@@ -63,6 +64,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--paper-export",
         action="store_true",
         help="Export local paper review CSV files to data/exports without running any workflow or simulation.",
+    )
+    parser.add_argument(
+        "--hypothesis-outcomes",
+        action="store_true",
+        help="Evaluate matured persisted strategy hypotheses against later persisted market snapshots only.",
     )
     return parser.parse_args(argv)
 
@@ -126,6 +132,10 @@ def build_orchestrator(config: AppConfig, telegram_runtime: TelegramRuntimeSetti
         strategy_hypothesis_engine=StrategyHypothesisEngine(
             config=config.strategy_hypotheses,
         ),
+        hypothesis_outcome_evaluator=HypothesisOutcomeEvaluator(
+            config=config.hypothesis_outcomes,
+            database_path=config.database_path,
+        ),
     )
 
 
@@ -180,6 +190,15 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except Exception:
             logger.exception("Paper trading review export failed.")
+            return 1
+    if args.hypothesis_outcomes:
+        logger.info("Evaluating persisted strategy hypothesis outcomes.")
+        try:
+            initialize_database(config.database_path)
+            print(evaluate_hypothesis_outcomes(config))
+            return 0
+        except Exception:
+            logger.exception("Strategy hypothesis outcome evaluation failed.")
             return 1
 
     workflow_label = "Telegram test" if runtime_options.test_telegram else "daily brief"
@@ -240,11 +259,16 @@ def build_paper_report(config: AppConfig) -> str:
         config=config.strategy_hypotheses,
         database_path=config.database_path,
     ).load_latest()
+    hypothesis_outcomes = HypothesisOutcomeEvaluator(
+        config=config.hypothesis_outcomes,
+        database_path=config.database_path,
+    ).load_recent(limit=8)
     return formatter.format(
         analytics,
         paper_signal_summary=asdict(config.paper_signal),
         research_readiness=research_readiness,
         strategy_hypotheses=strategy_hypotheses,
+        hypothesis_outcomes=hypothesis_outcomes,
     )
 
 
@@ -258,6 +282,50 @@ def export_paper_review_files(config: AppConfig, project_root: Path) -> list[Pat
         artifact.path
         for artifact in export_service.write_review_exports(export_dir)
     ]
+
+
+def evaluate_hypothesis_outcomes(config: AppConfig) -> str:
+    evaluator = HypothesisOutcomeEvaluator(
+        config=config.hypothesis_outcomes,
+        database_path=config.database_path,
+    )
+    repository = WorkflowRepository(config.database_path)
+    outcomes = evaluator.evaluate_pending()
+    for outcome in outcomes:
+        repository.store_strategy_hypothesis_outcome(outcome)
+
+    counts: dict[str, int] = {}
+    for outcome in outcomes:
+        counts[outcome.outcome_status] = counts.get(outcome.outcome_status, 0) + 1
+
+    lines = [
+        "STRATEGY HYPOTHESIS OUTCOME REVIEW",
+        "READ-ONLY",
+        "NO REAL EXECUTION",
+        "",
+        f"Evaluated Outcomes: {len(outcomes)}",
+        f"Favorable: {counts.get('FAVORABLE', 0)}",
+        f"Unfavorable: {counts.get('UNFAVORABLE', 0)}",
+        f"Neutral: {counts.get('NEUTRAL', 0)}",
+        f"Insufficient Follow-Up Data: {counts.get('INSUFFICIENT_FOLLOWUP_DATA', 0)}",
+        f"Blocked Not Evaluated: {counts.get('BLOCKED_NOT_EVALUATED', 0)}",
+    ]
+    if outcomes:
+        lines.extend(["", "Latest Evaluated Outcomes:"])
+        for outcome in outcomes[:8]:
+            move_label = "N/A" if outcome.move_pct is None else f"{outcome.move_pct:+.2f}%"
+            lines.append(
+                f"- {outcome.asset} | {outcome.strategy_family} | {outcome.horizon_hours}h | "
+                f"{outcome.outcome_status} | Move {move_label}"
+            )
+    else:
+        lines.extend(
+            [
+                "",
+                "No matured strategy hypothesis outcomes were eligible for evaluation yet.",
+            ]
+        )
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

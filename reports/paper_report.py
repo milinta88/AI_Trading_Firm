@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.models import ResearchReadinessResult, StrategyHypothesis
+from core.models import HypothesisOutcome, ResearchReadinessResult, StrategyHypothesis
 from paper_trading.analytics import PaperAnalyticsReport
 
 
@@ -15,6 +15,7 @@ class PaperTradingReportFormatter:
         paper_signal_summary: dict[str, Any] | None = None,
         research_readiness: dict[str, ResearchReadinessResult] | None = None,
         strategy_hypotheses: dict[str, StrategyHypothesis] | None = None,
+        hypothesis_outcomes: list[HypothesisOutcome] | None = None,
     ) -> str:
         performance = report.performance
         signal_review = report.signal_review
@@ -160,6 +161,15 @@ class PaperTradingReportFormatter:
                 ]
             )
 
+        if hypothesis_outcomes:
+            lines.extend(
+                [
+                    "",
+                    "Hypothesis Outcomes:",
+                    *_format_hypothesis_outcomes(hypothesis_outcomes),
+                ]
+            )
+
         if report.latest_run_summary:
             lines.extend(
                 [
@@ -250,4 +260,24 @@ def _format_strategy_hypotheses(
             lines.append("Warnings:")
             lines.extend(f"- {warning}" for warning in hypothesis.warnings[:3])
         lines.append(f"Invalidation Notes: {hypothesis.invalidation_notes}")
+    return lines or ["- Not available yet."]
+
+
+def _format_hypothesis_outcomes(outcomes: list[HypothesisOutcome]) -> list[str]:
+    lines: list[str] = []
+    for outcome in outcomes[:8]:
+        move_label = "N/A" if outcome.move_pct is None else f"{outcome.move_pct:+.2f}%"
+        lines.extend(
+            [
+                f"{outcome.asset} {outcome.horizon_hours}h:",
+                (
+                    f"- Status: {outcome.outcome_status} | Direction: {outcome.direction_bias} | "
+                    f"Family: {outcome.strategy_family} | Move: {move_label}"
+                ),
+                f"- Reason: {outcome.reason}",
+            ]
+        )
+        if outcome.warnings:
+            lines.append("Warnings:")
+            lines.extend(f"- {warning}" for warning in outcome.warnings[:2])
     return lines or ["- Not available yet."]

@@ -32,6 +32,7 @@ class OrchestratorBot:
         trend_analyzer: TrendAnalyzer,
         research_readiness_analyzer,
         strategy_hypothesis_engine,
+        hypothesis_outcome_evaluator,
     ) -> None:
         self.config = config
         self.repository = repository
@@ -45,6 +46,7 @@ class OrchestratorBot:
         self.trend_analyzer = trend_analyzer
         self.research_readiness_analyzer = research_readiness_analyzer
         self.strategy_hypothesis_engine = strategy_hypothesis_engine
+        self.hypothesis_outcome_evaluator = hypothesis_outcome_evaluator
 
     def run_daily_brief(self) -> WorkflowOutcome:
         run_date = datetime.now(ZoneInfo(self.config.timezone)).date()
@@ -86,6 +88,10 @@ class OrchestratorBot:
             )
             for hypothesis in strategy_hypotheses.values():
                 self.repository.store_strategy_hypothesis(workflow_run_id, hypothesis)
+            hypothesis_outcomes = self.hypothesis_outcome_evaluator.evaluate_pending()
+            for outcome in hypothesis_outcomes:
+                self.repository.store_strategy_hypothesis_outcome(outcome)
+            latest_hypothesis_outcomes = self.hypothesis_outcome_evaluator.load_recent(limit=8)
 
             report_context = DailyBriefContext(
                 run_date=run_date,
@@ -100,6 +106,7 @@ class OrchestratorBot:
                 trend_context=trend_context,
                 research_readiness=research_readiness,
                 strategy_hypotheses=strategy_hypotheses,
+                hypothesis_outcomes=latest_hypothesis_outcomes,
             )
             report_text = self.report_formatter.format(report_context)
 

@@ -17,6 +17,8 @@ def test_load_config_defaults_to_dry_run_without_telegram_credentials(tmp_path: 
     assert config.telegram_is_configured is False
     assert config.strategy_hypotheses.enabled is True
     assert config.strategy_hypotheses.min_confidence == "Medium"
+    assert config.hypothesis_outcomes.enabled is True
+    assert config.hypothesis_outcomes.horizons_hours == [4, 24, 72]
     assert config.telegram_status.mode == "DRY_RUN"
     assert runtime.mode == "DRY_RUN"
     assert runtime.allow_live_sends is False

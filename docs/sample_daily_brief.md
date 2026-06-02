@@ -102,6 +102,12 @@ Gold:
   - Blocker: Gold regime classification requires at least 10 persisted OK US10Y and real-yield snapshots.
   - Blocker: Missing sources: Gold DXY, Gold Spot Price.
 
+Hypothesis Outcomes:
+- BTC 24h: FAVORABLE | Direction: SHORT | Family: BTC_SENTIMENT_MEAN_REVERSION | Move: -1.40%
+  - Reason: SHORT hypothesis saw a -1.40% underlying move by the evaluation horizon, which was favorable versus the neutral threshold of 0.25%.
+- Gold 24h: BLOCKED_NOT_EVALUATED | Direction: NO_TRADE | Family: GOLD_NO_TRADE | Move: N/A
+  - Reason: Hypothesis status is BLOCKED, so outcome tracking remains informational only.
+
 Macro Regime:
 Neutral
 

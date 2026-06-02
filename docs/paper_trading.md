@@ -230,3 +230,13 @@ Phase 2.5 adds a research-only hypothesis layer that sits before any future pape
 - Hypotheses persist in the local `strategy_hypotheses` table for dashboard and report review.
 - `python main.py --paper-report` can now show the latest persisted BTC and Gold strategy hypotheses.
 - Hypotheses do not create simulated orders by themselves and do not change paper signal thresholds.
+
+## Phase 2.6 Hypothesis Outcome Tracking
+
+Phase 2.6 adds a read-only review layer that compares persisted strategy hypotheses with later persisted market snapshots.
+
+- Outcomes are evaluated from local SQLite only and use no live execution, broker, MT5, or private exchange API path.
+- `strategy_hypothesis_outcomes` stores horizon-based review rows for `4h`, `24h`, and `72h`.
+- Outcomes classify persisted hypotheses as `FAVORABLE`, `UNFAVORABLE`, `NEUTRAL`, `INSUFFICIENT_FOLLOWUP_DATA`, or `BLOCKED_NOT_EVALUATED`.
+- `python main.py --hypothesis-outcomes` evaluates matured hypotheses without creating paper orders or modifying paper signal thresholds.
+- `python main.py --paper-report` and the dashboard can now summarize the latest persisted hypothesis outcomes for review only.

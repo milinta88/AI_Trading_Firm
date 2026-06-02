@@ -17,6 +17,7 @@ Phase 2.3 adds paper trade journal notes and local CSV review exports for simula
 Phase 2.4 adds market regime classification, research readiness scoring, and explicit no-trade readiness reasons from persisted snapshots only.
 Phase 2.4B adds optional read-only Gold spot and DXY provider inputs plus clearer macro-provider setup guidance.
 Phase 2.5 adds a deterministic strategy hypothesis layer for research review, persistence, dashboard monitoring, and later paper-forward-testing preparation.
+Phase 2.6 adds read-only hypothesis outcome tracking that reviews persisted hypotheses against later persisted market snapshots only.
 
 This project still does not execute real trades. It does not route live orders, connect to MT5, or connect to private exchange APIs.
 
@@ -166,6 +167,15 @@ See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) f
 - Adds a dashboard Strategy Hypotheses tab for latest hypotheses and recent history
 - Does not create orders, broker signals, MT5 requests, private exchange API calls, or automatic execution
 
+## Phase 2.6 Hypothesis Outcome Tracking
+
+- Adds deterministic `hypothesis_outcomes` config for read-only forward review at `4h`, `24h`, and `72h` horizons
+- Evaluates persisted `strategy_hypotheses` against later persisted `market_snapshots` only
+- Persists `strategy_hypothesis_outcomes` with `FAVORABLE`, `UNFAVORABLE`, `NEUTRAL`, `INSUFFICIENT_FOLLOWUP_DATA`, or `BLOCKED_NOT_EVALUATED`
+- Adds `python main.py --hypothesis-outcomes` for local outcome evaluation without running trading or paper execution
+- Daily brief, `python main.py --paper-report`, and the dashboard now include concise hypothesis-outcome review sections
+- Does not create orders, paper trades, broker requests, MT5 requests, private exchange API calls, or automatic execution
+
 ## Windows Setup
 
 1. Open PowerShell in the project folder:
@@ -283,6 +293,12 @@ Paper review export:
 python main.py --paper-export
 ```
 
+Read-only hypothesis outcome review:
+
+```powershell
+python main.py --hypothesis-outcomes
+```
+
 Read-only dashboard:
 
 ```powershell
@@ -310,6 +326,7 @@ python main.py --dry-run
 - `python main.py --paper-run` runs the normal daily brief first, then runs the paper trading orchestrator only when `paper_trading.enabled` is `true`.
 - `python main.py --paper-report` prints a local text-only paper trading review report from SQLite and does not run the workflow or simulation.
 - `python main.py --paper-export` writes local paper review CSV files into `data/exports` and does not run the workflow or simulation.
+- `python main.py --hypothesis-outcomes` evaluates matured persisted strategy hypotheses against later persisted market snapshots only and does not run trading or paper execution.
 
 ## Read-Only Market Data
 
@@ -344,6 +361,7 @@ Phase 2.0 adds a Paper Trading tab for simulated-only local orders, open positio
 Phase 2.2 adds profile-aware paper signal tuning, normalized signal-review tables, no-trade reason charts, and profile/status filters for recent review rows.
 Phase 2.3 adds local paper-review CSV downloads plus a lightweight journal form and recent-notes table for simulated-only review notes.
 Phase 2.4 adds a Research Readiness tab with BTC/Gold readiness cards, regime summaries, missing/stale source review, and persisted readiness history.
+Phase 2.6 adds read-only Strategy Hypothesis Outcome summaries, latest outcome tables, and favorable/unfavorable rate views built only from persisted hypotheses and persisted market snapshots.
 
 See [docs/paper_trading.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/docs/paper_trading.md>) for the paper trading design and safety rules.
 

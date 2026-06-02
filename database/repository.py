@@ -7,7 +7,14 @@ from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from core.models import AnalysisResult, MarketDataPoint, ResearchReadinessResult, RiskStatus, StrategyHypothesis
+from core.models import (
+    AnalysisResult,
+    HypothesisOutcome,
+    MarketDataPoint,
+    ResearchReadinessResult,
+    RiskStatus,
+    StrategyHypothesis,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +283,73 @@ class WorkflowRepository:
             "Stored strategy hypothesis for %s in workflow run %s.",
             hypothesis.asset,
             workflow_run_id,
+        )
+
+    def store_strategy_hypothesis_outcome(self, outcome: HypothesisOutcome) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO strategy_hypothesis_outcomes (
+                    hypothesis_id,
+                    workflow_run_id,
+                    asset,
+                    hypothesis_name,
+                    direction_bias,
+                    strategy_family,
+                    horizon_hours,
+                    created_at,
+                    evaluated_at,
+                    entry_reference_price,
+                    followup_price,
+                    move_pct,
+                    max_favorable_move_pct,
+                    max_adverse_move_pct,
+                    outcome_status,
+                    reason,
+                    warnings_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(hypothesis_id, horizon_hours) DO UPDATE SET
+                    workflow_run_id = excluded.workflow_run_id,
+                    asset = excluded.asset,
+                    hypothesis_name = excluded.hypothesis_name,
+                    direction_bias = excluded.direction_bias,
+                    strategy_family = excluded.strategy_family,
+                    created_at = excluded.created_at,
+                    evaluated_at = excluded.evaluated_at,
+                    entry_reference_price = excluded.entry_reference_price,
+                    followup_price = excluded.followup_price,
+                    move_pct = excluded.move_pct,
+                    max_favorable_move_pct = excluded.max_favorable_move_pct,
+                    max_adverse_move_pct = excluded.max_adverse_move_pct,
+                    outcome_status = excluded.outcome_status,
+                    reason = excluded.reason,
+                    warnings_json = excluded.warnings_json
+                """,
+                (
+                    outcome.hypothesis_id,
+                    outcome.workflow_run_id,
+                    outcome.asset,
+                    outcome.hypothesis_name,
+                    outcome.direction_bias,
+                    outcome.strategy_family,
+                    outcome.horizon_hours,
+                    outcome.created_at.isoformat(),
+                    outcome.evaluated_at.isoformat(),
+                    outcome.entry_reference_price,
+                    outcome.followup_price,
+                    outcome.move_pct,
+                    outcome.max_favorable_move_pct,
+                    outcome.max_adverse_move_pct,
+                    outcome.outcome_status,
+                    outcome.reason,
+                    json.dumps(outcome.warnings),
+                ),
+            )
+        logger.info(
+            "Stored strategy hypothesis outcome for %s horizon %sh.",
+            outcome.asset,
+            outcome.horizon_hours,
         )
 
     def _connect(self) -> sqlite3.Connection:

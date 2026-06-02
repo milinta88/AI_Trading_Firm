@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from dataclasses import asdict, dataclass, field
 from io import StringIO
 from pathlib import Path
@@ -76,6 +76,20 @@ def _default_paper_signal_review_summary(profile: str = "conservative") -> dict[
     }
 
 
+def _default_hypothesis_outcome_summary() -> dict[str, Any]:
+    return {
+        "total_evaluated": 0,
+        "favorable_count": 0,
+        "unfavorable_count": 0,
+        "neutral_count": 0,
+        "insufficient_followup_count": 0,
+        "blocked_not_evaluated_count": 0,
+        "pending_count": 0,
+        "by_asset": [],
+        "by_strategy_family": [],
+    }
+
+
 @dataclass(frozen=True)
 class DashboardData:
     database_available: bool = False
@@ -87,6 +101,8 @@ class DashboardData:
     paper_trading_starting_equity: float = 10_000.0
     research_readiness_min_score: int = 70
     strategy_hypotheses_enabled: bool = False
+    hypothesis_outcomes_enabled: bool = False
+    hypothesis_outcome_horizons: list[int] = field(default_factory=list)
     latest_workflow_run: dict[str, Any] | None = None
     latest_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
     recent_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
@@ -130,6 +146,9 @@ class DashboardData:
     recent_research_readiness: list[dict[str, Any]] = field(default_factory=list)
     latest_strategy_hypotheses: list[dict[str, Any]] = field(default_factory=list)
     recent_strategy_hypotheses: list[dict[str, Any]] = field(default_factory=list)
+    latest_hypothesis_outcomes: list[dict[str, Any]] = field(default_factory=list)
+    recent_hypothesis_outcomes: list[dict[str, Any]] = field(default_factory=list)
+    hypothesis_outcome_summary: dict[str, Any] = field(default_factory=_default_hypothesis_outcome_summary)
     paper_signal_config: dict[str, Any] | None = field(
         default_factory=lambda: _default_paper_signal_config("conservative")
     )
@@ -145,6 +164,9 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
         paper_signal_config,
         research_readiness_config,
         strategy_hypotheses_enabled,
+        hypothesis_outcomes_enabled,
+        hypothesis_outcome_horizons,
+        hypothesis_outcome_max_lookback_days,
         database_path,
     ) = load_dashboard_config(project_root)
 
@@ -157,6 +179,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             research_readiness_enabled=research_readiness_config.enabled,
             research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
             strategy_hypotheses_enabled=strategy_hypotheses_enabled,
+            hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
+            hypothesis_outcome_horizons=hypothesis_outcome_horizons,
             paper_signal_config=paper_signal_config,
             message=f"Database not found at {database_path}. Run python main.py --dry-run first.",
         )
@@ -178,6 +202,13 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             )
             latest_strategy_hypotheses = _fetch_latest_strategy_hypotheses(connection)
             recent_strategy_hypotheses = _fetch_recent_strategy_hypotheses(connection, limit)
+            latest_hypothesis_outcomes = _fetch_latest_hypothesis_outcomes(connection)
+            recent_hypothesis_outcomes = _fetch_recent_hypothesis_outcomes(connection, limit)
+            hypothesis_outcome_summary = _build_hypothesis_outcome_summary(
+                connection,
+                horizons_hours=hypothesis_outcome_horizons,
+                max_lookback_days=hypothesis_outcome_max_lookback_days,
+            )
             return DashboardData(
                 database_available=True,
                 database_message=f"Connected read-only to {database_path}.",
@@ -189,6 +220,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 research_readiness_enabled=research_readiness_config.enabled,
                 research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
                 strategy_hypotheses_enabled=strategy_hypotheses_enabled,
+                hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
+                hypothesis_outcome_horizons=hypothesis_outcome_horizons,
                 paper_signal_config=paper_signal_config,
                 latest_workflow_run=_fetch_latest_workflow_run(connection),
                 latest_market_snapshots=latest_market_snapshots,
@@ -231,6 +264,9 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 recent_research_readiness=readiness_report["recent"],
                 latest_strategy_hypotheses=latest_strategy_hypotheses,
                 recent_strategy_hypotheses=recent_strategy_hypotheses,
+                latest_hypothesis_outcomes=latest_hypothesis_outcomes,
+                recent_hypothesis_outcomes=recent_hypothesis_outcomes,
+                hypothesis_outcome_summary=hypothesis_outcome_summary,
             )
     except sqlite3.Error as exc:
         return _empty_dashboard_data(
@@ -241,6 +277,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             research_readiness_enabled=research_readiness_config.enabled,
             research_readiness_min_score=research_readiness_config.min_readiness_score_for_decision,
             strategy_hypotheses_enabled=strategy_hypotheses_enabled,
+            hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
+            hypothesis_outcome_horizons=hypothesis_outcome_horizons,
             paper_signal_config=paper_signal_config,
             message=f"Unable to read dashboard database: {exc}",
         )
@@ -248,7 +286,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
 
 def load_dashboard_config(
     project_root: Path,
-) -> tuple[str, bool, bool, float, dict[str, Any], ResearchReadinessConfig, bool, Path]:
+) -> tuple[str, bool, bool, float, dict[str, Any], ResearchReadinessConfig, bool, bool, list[int], int, Path]:
     config_path = project_root / "config.yaml"
     if not config_path.exists():
         return (
@@ -259,6 +297,9 @@ def load_dashboard_config(
             _default_paper_signal_config(),
             _default_research_readiness_config(),
             False,
+            False,
+            [4, 24, 72],
+            14,
             project_root / "data" / "database.db",
         )
 
@@ -274,6 +315,9 @@ def load_dashboard_config(
             _default_paper_signal_config(),
             _default_research_readiness_config(),
             False,
+            False,
+            [4, 24, 72],
+            14,
             project_root / "data" / "database.db",
         )
 
@@ -283,6 +327,7 @@ def load_dashboard_config(
     paper_signal_section = raw_config.get("paper_signal", {})
     research_readiness_section = raw_config.get("research_readiness", {})
     strategy_hypotheses_section = raw_config.get("strategy_hypotheses", {})
+    hypothesis_outcomes_section = raw_config.get("hypothesis_outcomes", {})
     database_section = raw_config.get("database", {})
     database_path = Path(str(database_section.get("path", "data/database.db")))
     if not database_path.is_absolute():
@@ -297,6 +342,9 @@ def load_dashboard_config(
             _load_paper_signal_config(paper_signal_section),
             _load_research_readiness_config(research_readiness_section),
             _as_bool(strategy_hypotheses_section.get("enabled", False)),
+            _as_bool(hypothesis_outcomes_section.get("enabled", False)),
+            _load_hypothesis_outcome_horizons(hypothesis_outcomes_section),
+            int(hypothesis_outcomes_section.get("max_lookback_days", 14)),
             database_path,
         )
     except Exception:
@@ -308,6 +356,9 @@ def load_dashboard_config(
             _default_paper_signal_config(),
             _default_research_readiness_config(),
             False,
+            False,
+            [4, 24, 72],
+            14,
             database_path,
         )
 
@@ -449,6 +500,8 @@ def _empty_dashboard_data(
     research_readiness_enabled: bool,
     research_readiness_min_score: int,
     strategy_hypotheses_enabled: bool,
+    hypothesis_outcomes_enabled: bool,
+    hypothesis_outcome_horizons: list[int],
     paper_signal_config: dict[str, Any],
     message: str,
 ) -> DashboardData:
@@ -464,6 +517,8 @@ def _empty_dashboard_data(
         research_readiness_enabled=research_readiness_enabled,
         research_readiness_min_score=research_readiness_min_score,
         strategy_hypotheses_enabled=strategy_hypotheses_enabled,
+        hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
+        hypothesis_outcome_horizons=list(hypothesis_outcome_horizons),
         paper_signal_config=paper_signal_config,
         paper_analytics_summary=_default_paper_analytics_summary(paper_trading_starting_equity),
         paper_signal_review_summary=_default_paper_signal_review_summary(
@@ -588,6 +643,15 @@ def _default_research_readiness_config() -> ResearchReadinessConfig:
     )
 
 
+def _load_hypothesis_outcome_horizons(raw_config: object) -> list[int]:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    raw_horizons = section.get("horizons_hours", [4, 24, 72])
+    if not isinstance(raw_horizons, list):
+        return [4, 24, 72]
+    horizons = [int(item) for item in raw_horizons]
+    return sorted(dict.fromkeys(horizons))
+
+
 def _numeric_market_value(row: dict[str, Any]) -> float | None:
     value = parse_json_value(row.get("value_json"), fallback=None)
     if not isinstance(value, dict):
@@ -610,7 +674,7 @@ def _normalize_filter_value(value: str | None) -> str | None:
 
 
 def _row_date(row: dict[str, Any]) -> date | None:
-    raw_value = row.get("timestamp") or row.get("created_at") or row.get("completed_at")
+    raw_value = row.get("timestamp") or row.get("evaluated_at") or row.get("created_at") or row.get("completed_at")
     if not raw_value:
         return None
     if isinstance(raw_value, datetime):
@@ -623,6 +687,24 @@ def _row_date(row: dict[str, Any]) -> date | None:
         return datetime.fromisoformat(text).date()
     except ValueError:
         return None
+
+
+def _parse_row_datetime(raw_value: Any) -> datetime:
+    if raw_value in {None, ""}:
+        return datetime.now(UTC)
+    if isinstance(raw_value, datetime):
+        if raw_value.tzinfo is None:
+            return raw_value.replace(tzinfo=UTC)
+        return raw_value.astimezone(UTC)
+
+    text = str(raw_value).replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return datetime.now(UTC)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _csv_cell(value: Any) -> str | int | float:
@@ -901,6 +983,156 @@ def _parse_strategy_hypothesis_snapshot(row: dict[str, Any]) -> dict[str, Any]:
     parsed["blockers"] = parse_json_value(row.get("blockers_json"), fallback=[])
     parsed["warnings"] = parse_json_value(row.get("warnings_json"), fallback=[])
     return parsed
+
+
+def _fetch_latest_hypothesis_outcomes(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+    if not _table_exists(connection, "strategy_hypothesis_outcomes"):
+        return []
+
+    rows = _fetch_all(connection, "SELECT * FROM strategy_hypothesis_outcomes ORDER BY id DESC")
+    latest_by_asset_horizon: dict[tuple[str, int], dict[str, Any]] = {}
+    for row in rows:
+        key = (str(row.get("asset") or "UNKNOWN"), int(row.get("horizon_hours") or 0))
+        if key not in latest_by_asset_horizon:
+            latest_by_asset_horizon[key] = _parse_hypothesis_outcome_snapshot(row)
+    return list(latest_by_asset_horizon.values())
+
+
+def _fetch_recent_hypothesis_outcomes(connection: sqlite3.Connection, limit: int) -> list[dict[str, Any]]:
+    if not _table_exists(connection, "strategy_hypothesis_outcomes"):
+        return []
+    rows = _fetch_all(
+        connection,
+        "SELECT * FROM strategy_hypothesis_outcomes ORDER BY id DESC LIMIT ?",
+        (limit,),
+    )
+    return [_parse_hypothesis_outcome_snapshot(row) for row in rows]
+
+
+def _parse_hypothesis_outcome_snapshot(row: dict[str, Any]) -> dict[str, Any]:
+    parsed = dict(row)
+    parsed["warnings"] = parse_json_value(row.get("warnings_json"), fallback=[])
+    return parsed
+
+
+def _build_hypothesis_outcome_summary(
+    connection: sqlite3.Connection,
+    *,
+    horizons_hours: list[int],
+    max_lookback_days: int,
+) -> dict[str, Any]:
+    summary = _default_hypothesis_outcome_summary()
+    if not _table_exists(connection, "strategy_hypothesis_outcomes"):
+        summary["pending_count"] = _count_pending_hypothesis_outcomes(
+            connection,
+            horizons_hours=horizons_hours,
+            max_lookback_days=max_lookback_days,
+        )
+        return summary
+
+    rows = _fetch_all(connection, "SELECT * FROM strategy_hypothesis_outcomes ORDER BY id DESC")
+    parsed_rows = [_parse_hypothesis_outcome_snapshot(row) for row in rows]
+    directional_statuses = {"FAVORABLE", "UNFAVORABLE", "NEUTRAL"}
+
+    summary["total_evaluated"] = len(parsed_rows)
+    summary["favorable_count"] = sum(1 for row in parsed_rows if row.get("outcome_status") == "FAVORABLE")
+    summary["unfavorable_count"] = sum(1 for row in parsed_rows if row.get("outcome_status") == "UNFAVORABLE")
+    summary["neutral_count"] = sum(1 for row in parsed_rows if row.get("outcome_status") == "NEUTRAL")
+    summary["insufficient_followup_count"] = sum(
+        1 for row in parsed_rows if row.get("outcome_status") == "INSUFFICIENT_FOLLOWUP_DATA"
+    )
+    summary["blocked_not_evaluated_count"] = sum(
+        1 for row in parsed_rows if row.get("outcome_status") == "BLOCKED_NOT_EVALUATED"
+    )
+    summary["pending_count"] = _count_pending_hypothesis_outcomes(
+        connection,
+        horizons_hours=horizons_hours,
+        max_lookback_days=max_lookback_days,
+    )
+
+    asset_groups: dict[str, dict[str, Any]] = {}
+    family_groups: dict[str, dict[str, Any]] = {}
+    for row in parsed_rows:
+        status = str(row.get("outcome_status") or "")
+        asset = str(row.get("asset") or "UNKNOWN")
+        family = str(row.get("strategy_family") or "UNKNOWN")
+
+        asset_entry = asset_groups.setdefault(
+            asset,
+            {"asset": asset, "total_outcomes": 0, "directional_count": 0, "favorable_count": 0},
+        )
+        family_entry = family_groups.setdefault(
+            family,
+            {"strategy_family": family, "total_outcomes": 0, "directional_count": 0, "favorable_count": 0},
+        )
+        asset_entry["total_outcomes"] += 1
+        family_entry["total_outcomes"] += 1
+        if status in directional_statuses:
+            asset_entry["directional_count"] += 1
+            family_entry["directional_count"] += 1
+            if status == "FAVORABLE":
+                asset_entry["favorable_count"] += 1
+                family_entry["favorable_count"] += 1
+
+    summary["by_asset"] = [
+        {
+            **row,
+            "favorable_rate_pct": round((row["favorable_count"] / row["directional_count"]) * 100, 2)
+            if row["directional_count"]
+            else None,
+        }
+        for _, row in sorted(asset_groups.items())
+    ]
+    summary["by_strategy_family"] = [
+        {
+            **row,
+            "favorable_rate_pct": round((row["favorable_count"] / row["directional_count"]) * 100, 2)
+            if row["directional_count"]
+            else None,
+        }
+        for _, row in sorted(family_groups.items())
+    ]
+    return summary
+
+
+def _count_pending_hypothesis_outcomes(
+    connection: sqlite3.Connection,
+    *,
+    horizons_hours: list[int],
+    max_lookback_days: int,
+) -> int:
+    if not _table_exists(connection, "strategy_hypotheses"):
+        return 0
+
+    existing_keys: set[tuple[int, int]] = set()
+    if _table_exists(connection, "strategy_hypothesis_outcomes"):
+        outcome_rows = _fetch_all(
+            connection,
+            "SELECT hypothesis_id, horizon_hours FROM strategy_hypothesis_outcomes",
+        )
+        existing_keys = {
+            (int(row.get("hypothesis_id") or 0), int(row.get("horizon_hours") or 0))
+            for row in outcome_rows
+        }
+
+    current_time = datetime.now(UTC)
+    cutoff_time = current_time - timedelta(days=max_lookback_days)
+
+    hypothesis_rows = _fetch_all(
+        connection,
+        "SELECT id, created_at FROM strategy_hypotheses WHERE created_at >= ?",
+        (cutoff_time.isoformat(),),
+    )
+
+    pending = 0
+    for row in hypothesis_rows:
+        created_at = _parse_row_datetime(row.get("created_at"))
+        for horizon in horizons_hours:
+            if current_time < created_at + timedelta(hours=horizon):
+                continue
+            if (int(row.get("id") or 0), int(horizon)) not in existing_keys:
+                pending += 1
+    return pending
 
 
 def _build_dynamic_research_readiness_rows(

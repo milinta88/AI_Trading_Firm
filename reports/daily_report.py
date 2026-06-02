@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from core.models import DailyBriefContext, MarketDataPoint, ResearchReadinessResult, StrategyHypothesis, TrendResult
+from core.models import (
+    DailyBriefContext,
+    HypothesisOutcome,
+    MarketDataPoint,
+    ResearchReadinessResult,
+    StrategyHypothesis,
+    TrendResult,
+)
 from scoring.models import ScoreComponent
 
 
@@ -78,6 +85,9 @@ class DailyReportFormatter:
             "",
             "Strategy Hypotheses:",
             *self._format_strategy_hypotheses(brief.strategy_hypotheses),
+            "",
+            "Hypothesis Outcomes:",
+            *self._format_hypothesis_outcomes(brief.hypothesis_outcomes),
             "",
             "Macro Regime:",
             brief.macro_regime,
@@ -214,6 +224,23 @@ class DailyReportFormatter:
             for blocker in hypothesis.blockers[:2]:
                 lines.append(f"  - Blocker: {blocker}")
             for warning in hypothesis.warnings[:2]:
+                lines.append(f"  - Warning: {warning}")
+        return lines
+
+    @staticmethod
+    def _format_hypothesis_outcomes(outcomes: list[HypothesisOutcome]) -> list[str]:
+        if not outcomes:
+            return ["- Not available yet."]
+
+        lines: list[str] = []
+        for outcome in outcomes[:6]:
+            move_label = "N/A" if outcome.move_pct is None else f"{outcome.move_pct:+.2f}%"
+            lines.append(
+                f"- {outcome.asset} {outcome.horizon_hours}h: {outcome.outcome_status} | "
+                f"Direction: {outcome.direction_bias} | Family: {outcome.strategy_family} | Move: {move_label}"
+            )
+            lines.append(f"  - Reason: {outcome.reason}")
+            for warning in outcome.warnings[:1]:
                 lines.append(f"  - Warning: {warning}")
         return lines
 

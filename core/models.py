@@ -86,6 +86,27 @@ class StrategyHypothesis:
 
 
 @dataclass(frozen=True)
+class HypothesisOutcome:
+    hypothesis_id: int
+    workflow_run_id: int
+    asset: str
+    hypothesis_name: str
+    direction_bias: str
+    strategy_family: str
+    horizon_hours: int
+    created_at: datetime
+    evaluated_at: datetime
+    entry_reference_price: float | None
+    followup_price: float | None
+    move_pct: float | None
+    max_favorable_move_pct: float | None
+    max_adverse_move_pct: float | None
+    outcome_status: str
+    reason: str
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
 class DailyBriefContext:
     run_date: date
     mode: str
@@ -99,6 +120,7 @@ class DailyBriefContext:
     trend_context: dict[str, TrendResult] = field(default_factory=dict)
     research_readiness: dict[str, ResearchReadinessResult] = field(default_factory=dict)
     strategy_hypotheses: dict[str, StrategyHypothesis] = field(default_factory=dict)
+    hypothesis_outcomes: list[HypothesisOutcome] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

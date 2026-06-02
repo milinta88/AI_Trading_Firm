@@ -107,3 +107,11 @@ strategy_hypotheses:
   min_readiness_score: 70
   min_confidence: Medium
   allow_watch_when_not_ready: true
+
+hypothesis_outcomes:
+  enabled: true
+  horizons_hours: [4, 24, 72]
+  neutral_move_pct:
+    BTC: 0.25
+    Gold: 0.20
+  max_lookback_days: 14

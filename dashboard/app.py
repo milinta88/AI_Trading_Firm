@@ -564,6 +564,56 @@ def _render_strategy_hypotheses(data: DashboardData, filters: dict[str, Any]) ->
         empty_message="No recent strategy hypothesis history matches the selected filters.",
     )
 
+    st.markdown("#### Strategy Hypothesis Outcomes")
+    if not getattr(data, "hypothesis_outcomes_enabled", False):
+        st.info("Hypothesis outcomes are disabled in config.")
+        return
+
+    outcome_summary = getattr(data, "hypothesis_outcome_summary", None) or {}
+    col_total, col_favorable, col_unfavorable, col_pending = st.columns(4)
+    col_total.metric("Total Outcomes", outcome_summary.get("total_evaluated", 0))
+    col_favorable.metric("Favorable", outcome_summary.get("favorable_count", 0))
+    col_unfavorable.metric("Unfavorable", outcome_summary.get("unfavorable_count", 0))
+    col_pending.metric(
+        "Pending / Insufficient",
+        f"{outcome_summary.get('pending_count', 0)} / {outcome_summary.get('insufficient_followup_count', 0)}",
+    )
+
+    st.markdown("#### Outcome Rate By Asset")
+    _render_table(
+        outcome_summary.get("by_asset", []),
+        empty_message="No hypothesis outcome asset summary is available yet.",
+    )
+
+    st.markdown("#### Outcome Rate By Strategy Family")
+    _render_table(
+        outcome_summary.get("by_strategy_family", []),
+        empty_message="No hypothesis outcome family summary is available yet.",
+    )
+
+    st.markdown("#### Latest Hypothesis Outcomes")
+    latest_outcomes = filter_rows(
+        getattr(data, "latest_hypothesis_outcomes", []),
+        asset=filters.get("asset"),
+    )
+    _render_table(
+        _hypothesis_outcome_rows(latest_outcomes),
+        empty_message="No latest hypothesis outcomes are available yet.",
+    )
+
+    st.markdown("#### Recent Hypothesis Outcome History")
+    recent_outcomes = filter_rows(
+        getattr(data, "recent_hypothesis_outcomes", []),
+        start_date=filters.get("start_date"),
+        end_date=filters.get("end_date"),
+        asset=filters.get("asset"),
+        limit=filters.get("limit"),
+    )
+    _render_table(
+        _hypothesis_outcome_rows(recent_outcomes),
+        empty_message="No recent hypothesis outcome history matches the selected filters.",
+    )
+
 
 def _render_archive_date_filter(items: list[dict[str, Any]]) -> tuple[date | None, date | None]:
     available_dates = [
@@ -1104,6 +1154,29 @@ def _strategy_hypothesis_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
             "blockers": "; ".join(row.get("blockers", [])) if isinstance(row.get("blockers"), list) else row.get("blockers"),
             "warnings": "; ".join(row.get("warnings", [])) if isinstance(row.get("warnings"), list) else row.get("warnings"),
             "created_at": row.get("created_at"),
+        }
+        for row in rows
+    ]
+
+
+def _hypothesis_outcome_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "asset": row.get("asset"),
+            "hypothesis_name": row.get("hypothesis_name"),
+            "direction_bias": row.get("direction_bias"),
+            "strategy_family": row.get("strategy_family"),
+            "horizon_hours": row.get("horizon_hours"),
+            "outcome_status": row.get("outcome_status"),
+            "move_pct": row.get("move_pct"),
+            "max_favorable_move_pct": row.get("max_favorable_move_pct"),
+            "max_adverse_move_pct": row.get("max_adverse_move_pct"),
+            "entry_reference_price": row.get("entry_reference_price"),
+            "followup_price": row.get("followup_price"),
+            "reason": row.get("reason"),
+            "warnings": "; ".join(row.get("warnings", [])) if isinstance(row.get("warnings"), list) else row.get("warnings"),
+            "created_at": row.get("created_at"),
+            "evaluated_at": row.get("evaluated_at"),
         }
         for row in rows
     ]

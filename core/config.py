@@ -155,6 +155,14 @@ class StrategyHypothesisConfig:
 
 
 @dataclass(frozen=True)
+class HypothesisOutcomeConfig:
+    enabled: bool
+    horizons_hours: list[int]
+    neutral_move_pct: dict[str, float]
+    max_lookback_days: int
+
+
+@dataclass(frozen=True)
 class GoldSpotProviderConfig:
     enabled: bool
     provider: str
@@ -202,6 +210,7 @@ class AppConfig:
     paper_signal: PaperSignalConfig
     research_readiness: ResearchReadinessConfig
     strategy_hypotheses: StrategyHypothesisConfig
+    hypothesis_outcomes: HypothesisOutcomeConfig
     gold_spot_provider: GoldSpotProviderConfig
     dxy_provider: DxyProviderConfig
 
@@ -239,6 +248,7 @@ def load_config(project_root: Path) -> AppConfig:
     paper_signal_section = raw_config.get("paper_signal", {})
     research_readiness_section = raw_config.get("research_readiness", {})
     strategy_hypotheses_section = raw_config.get("strategy_hypotheses", {})
+    hypothesis_outcomes_section = raw_config.get("hypothesis_outcomes", {})
 
     config = AppConfig(
         project_root=project_root,
@@ -284,6 +294,7 @@ def load_config(project_root: Path) -> AppConfig:
         paper_signal=_build_paper_signal_config(paper_signal_section),
         research_readiness=_build_research_readiness_config(research_readiness_section),
         strategy_hypotheses=_build_strategy_hypotheses_config(strategy_hypotheses_section),
+        hypothesis_outcomes=_build_hypothesis_outcomes_config(hypothesis_outcomes_section),
         gold_spot_provider=_build_gold_spot_provider_config(gold_spot_provider_section),
         dxy_provider=_build_dxy_provider_config(dxy_provider_section),
     )
@@ -440,6 +451,24 @@ def validate_config(config: AppConfig) -> None:
     if config.strategy_hypotheses.min_confidence not in ALLOWED_CONFIDENCE_LEVELS:
         allowed_confidence = ", ".join(sorted(ALLOWED_CONFIDENCE_LEVELS))
         errors.append(f"strategy_hypotheses.min_confidence must be one of: {allowed_confidence}.")
+
+    if not config.hypothesis_outcomes.horizons_hours:
+        errors.append("hypothesis_outcomes.horizons_hours must define at least one horizon.")
+
+    if config.hypothesis_outcomes.max_lookback_days <= 0:
+        errors.append("hypothesis_outcomes.max_lookback_days must be greater than zero.")
+
+    for horizon in config.hypothesis_outcomes.horizons_hours:
+        if horizon <= 0:
+            errors.append("hypothesis_outcomes.horizons_hours must only contain positive integers.")
+
+    for asset_key in ("BTC", "Gold"):
+        if asset_key not in config.hypothesis_outcomes.neutral_move_pct:
+            errors.append(f"hypothesis_outcomes.neutral_move_pct.{asset_key} is required.")
+            continue
+        threshold = config.hypothesis_outcomes.neutral_move_pct[asset_key]
+        if threshold < 0:
+            errors.append(f"hypothesis_outcomes.neutral_move_pct.{asset_key} must be zero or greater.")
 
     if config.gold_spot_provider.provider not in ALLOWED_GOLD_SPOT_PROVIDERS:
         errors.append(
@@ -677,6 +706,31 @@ def _build_strategy_hypotheses_config(raw_config: object) -> StrategyHypothesisC
         min_readiness_score=int(section.get("min_readiness_score", 70)),
         min_confidence=_clean_confidence(str(section.get("min_confidence", "Medium"))),
         allow_watch_when_not_ready=_as_bool(section.get("allow_watch_when_not_ready", True)),
+    )
+
+
+def _build_hypothesis_outcomes_config(raw_config: object) -> HypothesisOutcomeConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    raw_horizons = section.get("horizons_hours", [4, 24, 72])
+    if isinstance(raw_horizons, list):
+        horizons = [int(item) for item in raw_horizons]
+    else:
+        horizons = [4, 24, 72]
+
+    raw_neutral_move_pct = section.get("neutral_move_pct", {})
+    neutral_move_pct = {
+        "BTC": 0.25,
+        "Gold": 0.20,
+    }
+    if isinstance(raw_neutral_move_pct, dict):
+        for asset_key, default_value in neutral_move_pct.items():
+            neutral_move_pct[asset_key] = float(raw_neutral_move_pct.get(asset_key, default_value))
+
+    return HypothesisOutcomeConfig(
+        enabled=_as_bool(section.get("enabled", True)),
+        horizons_hours=sorted(dict.fromkeys(horizons)),
+        neutral_move_pct=neutral_move_pct,
+        max_lookback_days=int(section.get("max_lookback_days", 14)),
     )
 
 

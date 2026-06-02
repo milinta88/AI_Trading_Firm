@@ -190,6 +190,16 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Dashboard includes a Strategy Hypotheses tab and recent history view
 - No real trading, no live routing, no MT5, and no private exchange APIs
 
+### Phase 2.6 Hypothesis Outcome Tracking
+
+- Deterministic read-only outcome evaluator built from persisted `strategy_hypotheses` and later persisted `market_snapshots` only
+- `hypothesis_outcomes` config section with horizon settings, neutral-move thresholds, and maximum lookback window
+- Persisted `strategy_hypothesis_outcomes` table with favorable, unfavorable, neutral, insufficient-follow-up, and blocked-not-evaluated classifications
+- `python main.py --hypothesis-outcomes` local review mode for matured hypotheses only
+- Daily brief and `python main.py --paper-report` now include concise hypothesis-outcome summaries
+- Dashboard includes read-only hypothesis-outcome counts, rates, and latest-history tables
+- No real trading, no paper order creation, no live routing, no MT5, and no private exchange APIs
+
 ## Current Known Limitations
 
 - Gold macro FRED data depends on `FRED_API_KEY`; without it, FRED inputs stay `NOT_CONFIGURED`.
@@ -200,6 +210,7 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Gold macro freshness can degrade quickly because CPI and Fed Funds are slower-moving series than BTC data.
 - Data hygiene checks identify issues but do not repair or compact data automatically.
 - Strategy hypotheses are research artifacts only; they are not paper orders, execution signals, or autonomous decisions.
+- Hypothesis outcomes are review metrics only; they do not create paper trades, promote hypotheses automatically, or authorize execution.
 - Paper trading is simulated-only and disabled by default.
 - Paper fills use persisted latest snapshot prices, not broker or exchange execution.
 - Exploratory paper-signal tuning is available for simulation only and must not be treated as production-ready execution logic.
@@ -215,11 +226,11 @@ Build a research-first AI trading workflow for Gold and BTC.
 - Keep scoring changes conservative until enough snapshot history exists.
 - Consider explicit retention tooling only after approval, with backups and audit logs.
 
-### Phase 2.6
+### Phase 2.7
 
-- Consider paper forward-testing review that compares persisted strategy hypotheses against later market outcomes.
-- Consider paper performance slicing by regime, profile, strategy family, or readiness bucket using persisted local data only.
-- Consider read-only hypothesis review tagging/filtering refinements if the archive grows.
+- Consider deeper hypothesis review analytics such as win-rate slicing by regime, strategy family, or readiness bucket using persisted local data only.
+- Consider read-only hypothesis tagging, review notes, and archive filters if hypothesis history grows.
+- Consider later paper forward-testing promotion rules only after more outcome history exists and after explicit approval.
 
 ### Phase 3.0
 
@@ -234,6 +245,7 @@ Build a research-first AI trading workflow for Gold and BTC.
 - `python main.py --paper-run`
 - `python main.py --paper-report`
 - `python main.py --paper-export`
+- `python main.py --hypothesis-outcomes`
 - `streamlit run dashboard/app.py`
 - `python -m compileall .`
 - `pytest`
