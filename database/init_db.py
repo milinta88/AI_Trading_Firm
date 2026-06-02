@@ -285,6 +285,34 @@ CREATE TABLE IF NOT EXISTS strategy_hypothesis_outcomes (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_strategy_hypothesis_outcomes_hypothesis_horizon
 ON strategy_hypothesis_outcomes (hypothesis_id, horizon_hours);
+
+CREATE TABLE IF NOT EXISTS hypothesis_review_summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    lookback_days INTEGER NOT NULL,
+    total_outcomes INTEGER NOT NULL,
+    evaluated_outcomes INTEGER NOT NULL,
+    favorable_count INTEGER NOT NULL,
+    unfavorable_count INTEGER NOT NULL,
+    neutral_count INTEGER NOT NULL,
+    insufficient_followup_count INTEGER NOT NULL,
+    blocked_not_evaluated_count INTEGER NOT NULL,
+    favorable_rate REAL NOT NULL,
+    unfavorable_rate REAL NOT NULL,
+    neutral_rate REAL NOT NULL,
+    by_asset_json TEXT NOT NULL,
+    by_strategy_family_json TEXT NOT NULL,
+    by_regime_json TEXT NOT NULL,
+    by_horizon_json TEXT NOT NULL,
+    by_readiness_bucket_json TEXT NOT NULL,
+    by_hypothesis_status_json TEXT NOT NULL,
+    avg_move_pct REAL,
+    avg_max_favorable_move_pct REAL,
+    avg_max_adverse_move_pct REAL,
+    promoted_candidates_json TEXT NOT NULL,
+    blocked_candidates_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL
+);
 """
 
 

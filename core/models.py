@@ -107,6 +107,34 @@ class HypothesisOutcome:
 
 
 @dataclass(frozen=True)
+class HypothesisReviewSummary:
+    total_outcomes: int
+    evaluated_outcomes: int
+    favorable_count: int
+    unfavorable_count: int
+    neutral_count: int
+    insufficient_followup_count: int
+    blocked_not_evaluated_count: int
+    favorable_rate: float
+    unfavorable_rate: float
+    neutral_rate: float
+    by_asset: list[dict[str, Any]]
+    by_strategy_family: list[dict[str, Any]]
+    by_regime: list[dict[str, Any]]
+    by_horizon: list[dict[str, Any]]
+    by_readiness_bucket: list[dict[str, Any]]
+    by_hypothesis_status: list[dict[str, Any]]
+    avg_move_pct: float | None
+    avg_max_favorable_move_pct: float | None
+    avg_max_adverse_move_pct: float | None
+    warnings: list[str]
+    promoted_candidates: list[dict[str, Any]]
+    blocked_candidates: list[dict[str, Any]]
+    created_at: datetime | None = None
+    lookback_days: int | None = None
+
+
+@dataclass(frozen=True)
 class DailyBriefContext:
     run_date: date
     mode: str
@@ -121,6 +149,7 @@ class DailyBriefContext:
     research_readiness: dict[str, ResearchReadinessResult] = field(default_factory=dict)
     strategy_hypotheses: dict[str, StrategyHypothesis] = field(default_factory=dict)
     hypothesis_outcomes: list[HypothesisOutcome] = field(default_factory=list)
+    hypothesis_review_summary: HypothesisReviewSummary | None = None
 
 
 @dataclass(frozen=True)

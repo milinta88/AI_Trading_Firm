@@ -115,3 +115,15 @@ hypothesis_outcomes:
     BTC: 0.25
     Gold: 0.20
   max_lookback_days: 14
+
+hypothesis_review:
+  enabled: true
+  min_evaluated_outcomes_for_candidate: 10
+  min_favorable_rate_for_candidate: 0.55
+  max_unfavorable_rate_for_candidate: 0.40
+  max_avg_adverse_move_pct_for_candidate:
+    BTC: 1.5
+    Gold: 0.8
+  readiness_buckets:
+    low_below: 50
+    medium_below: 70

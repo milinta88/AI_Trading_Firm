@@ -3,6 +3,7 @@ from __future__ import annotations
 from core.models import (
     DailyBriefContext,
     HypothesisOutcome,
+    HypothesisReviewSummary,
     MarketDataPoint,
     ResearchReadinessResult,
     StrategyHypothesis,
@@ -88,6 +89,9 @@ class DailyReportFormatter:
             "",
             "Hypothesis Outcomes:",
             *self._format_hypothesis_outcomes(brief.hypothesis_outcomes),
+            "",
+            "Hypothesis Review Analytics:",
+            *self._format_hypothesis_review_summary(brief.hypothesis_review_summary),
             "",
             "Macro Regime:",
             brief.macro_regime,
@@ -242,6 +246,38 @@ class DailyReportFormatter:
             lines.append(f"  - Reason: {outcome.reason}")
             for warning in outcome.warnings[:1]:
                 lines.append(f"  - Warning: {warning}")
+        return lines
+
+    @staticmethod
+    def _format_hypothesis_review_summary(summary: HypothesisReviewSummary | None) -> list[str]:
+        if summary is None:
+            return ["- Not available yet."]
+
+        lines = [
+            (
+                f"- Evaluated: {summary.evaluated_outcomes} | Favorable: {summary.favorable_count} "
+                f"({summary.favorable_rate:.0%}) | Unfavorable: {summary.unfavorable_count} "
+                f"({summary.unfavorable_rate:.0%}) | Neutral: {summary.neutral_count} ({summary.neutral_rate:.0%})"
+            ),
+            (
+                f"- Insufficient Follow-Up: {summary.insufficient_followup_count} | "
+                f"Blocked Not Evaluated: {summary.blocked_not_evaluated_count}"
+            ),
+        ]
+        if summary.promoted_candidates:
+            for candidate in summary.promoted_candidates[:2]:
+                lines.append(
+                    f"  - Review Candidate: {candidate['strategy_family']} ({candidate['asset']}) "
+                    f"fav={candidate['favorable_rate']:.0%} n={candidate['evaluated_outcomes']}"
+                )
+        elif summary.blocked_candidates:
+            for candidate in summary.blocked_candidates[:2]:
+                lines.append(
+                    f"  - Blocked Candidate: {candidate['strategy_family']} ({candidate['asset']}) "
+                    f"{candidate['reason']}"
+                )
+        for warning in summary.warnings[:2]:
+            lines.append(f"  - Warning: {warning}")
         return lines
 
     @staticmethod

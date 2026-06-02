@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.models import HypothesisOutcome, ResearchReadinessResult, StrategyHypothesis
+from core.models import HypothesisOutcome, HypothesisReviewSummary, ResearchReadinessResult, StrategyHypothesis
 from paper_trading.analytics import PaperAnalyticsReport
 
 
@@ -16,6 +16,7 @@ class PaperTradingReportFormatter:
         research_readiness: dict[str, ResearchReadinessResult] | None = None,
         strategy_hypotheses: dict[str, StrategyHypothesis] | None = None,
         hypothesis_outcomes: list[HypothesisOutcome] | None = None,
+        hypothesis_review_summary: HypothesisReviewSummary | None = None,
     ) -> str:
         performance = report.performance
         signal_review = report.signal_review
@@ -170,6 +171,15 @@ class PaperTradingReportFormatter:
                 ]
             )
 
+        if hypothesis_review_summary:
+            lines.extend(
+                [
+                    "",
+                    "Hypothesis Review Analytics:",
+                    *_format_hypothesis_review_summary(hypothesis_review_summary),
+                ]
+            )
+
         if report.latest_run_summary:
             lines.extend(
                 [
@@ -281,3 +291,31 @@ def _format_hypothesis_outcomes(outcomes: list[HypothesisOutcome]) -> list[str]:
             lines.append("Warnings:")
             lines.extend(f"- {warning}" for warning in outcome.warnings[:2])
     return lines or ["- Not available yet."]
+
+
+def _format_hypothesis_review_summary(summary: HypothesisReviewSummary) -> list[str]:
+    lines = [
+        f"Total Outcomes: {summary.total_outcomes}",
+        f"Evaluated Outcomes: {summary.evaluated_outcomes}",
+        f"Favorable: {summary.favorable_count} ({summary.favorable_rate:.2%})",
+        f"Unfavorable: {summary.unfavorable_count} ({summary.unfavorable_rate:.2%})",
+        f"Neutral: {summary.neutral_count} ({summary.neutral_rate:.2%})",
+        f"Insufficient Follow-Up Data: {summary.insufficient_followup_count}",
+        f"Blocked Not Evaluated: {summary.blocked_not_evaluated_count}",
+    ]
+    if summary.promoted_candidates:
+        lines.append("Review Candidates:")
+        lines.extend(
+            f"- {candidate['strategy_family']} | Asset {candidate['asset']} | Favorable {candidate['favorable_rate']:.2%} | Evaluated {candidate['evaluated_outcomes']}"
+            for candidate in summary.promoted_candidates[:5]
+        )
+    if summary.blocked_candidates:
+        lines.append("Blocked Candidates:")
+        lines.extend(
+            f"- {candidate['strategy_family']} | {candidate['reason']}"
+            for candidate in summary.blocked_candidates[:5]
+        )
+    if summary.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in summary.warnings[:5])
+    return lines

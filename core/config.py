@@ -163,6 +163,22 @@ class HypothesisOutcomeConfig:
 
 
 @dataclass(frozen=True)
+class HypothesisReviewBucketsConfig:
+    low_below: int
+    medium_below: int
+
+
+@dataclass(frozen=True)
+class HypothesisReviewConfig:
+    enabled: bool
+    min_evaluated_outcomes_for_candidate: int
+    min_favorable_rate_for_candidate: float
+    max_unfavorable_rate_for_candidate: float
+    max_avg_adverse_move_pct_for_candidate: dict[str, float]
+    readiness_buckets: HypothesisReviewBucketsConfig
+
+
+@dataclass(frozen=True)
 class GoldSpotProviderConfig:
     enabled: bool
     provider: str
@@ -211,6 +227,7 @@ class AppConfig:
     research_readiness: ResearchReadinessConfig
     strategy_hypotheses: StrategyHypothesisConfig
     hypothesis_outcomes: HypothesisOutcomeConfig
+    hypothesis_review: HypothesisReviewConfig
     gold_spot_provider: GoldSpotProviderConfig
     dxy_provider: DxyProviderConfig
 
@@ -249,6 +266,7 @@ def load_config(project_root: Path) -> AppConfig:
     research_readiness_section = raw_config.get("research_readiness", {})
     strategy_hypotheses_section = raw_config.get("strategy_hypotheses", {})
     hypothesis_outcomes_section = raw_config.get("hypothesis_outcomes", {})
+    hypothesis_review_section = raw_config.get("hypothesis_review", {})
 
     config = AppConfig(
         project_root=project_root,
@@ -295,6 +313,7 @@ def load_config(project_root: Path) -> AppConfig:
         research_readiness=_build_research_readiness_config(research_readiness_section),
         strategy_hypotheses=_build_strategy_hypotheses_config(strategy_hypotheses_section),
         hypothesis_outcomes=_build_hypothesis_outcomes_config(hypothesis_outcomes_section),
+        hypothesis_review=_build_hypothesis_review_config(hypothesis_review_section),
         gold_spot_provider=_build_gold_spot_provider_config(gold_spot_provider_section),
         dxy_provider=_build_dxy_provider_config(dxy_provider_section),
     )
@@ -469,6 +488,35 @@ def validate_config(config: AppConfig) -> None:
         threshold = config.hypothesis_outcomes.neutral_move_pct[asset_key]
         if threshold < 0:
             errors.append(f"hypothesis_outcomes.neutral_move_pct.{asset_key} must be zero or greater.")
+
+    if config.hypothesis_review.min_evaluated_outcomes_for_candidate <= 0:
+        errors.append("hypothesis_review.min_evaluated_outcomes_for_candidate must be greater than zero.")
+
+    for field_name, value in {
+        "hypothesis_review.min_favorable_rate_for_candidate": config.hypothesis_review.min_favorable_rate_for_candidate,
+        "hypothesis_review.max_unfavorable_rate_for_candidate": config.hypothesis_review.max_unfavorable_rate_for_candidate,
+    }.items():
+        if value < 0 or value > 1:
+            errors.append(f"{field_name} must be between 0 and 1.")
+
+    for asset_key in ("BTC", "Gold"):
+        if asset_key not in config.hypothesis_review.max_avg_adverse_move_pct_for_candidate:
+            errors.append(f"hypothesis_review.max_avg_adverse_move_pct_for_candidate.{asset_key} is required.")
+            continue
+        threshold = config.hypothesis_review.max_avg_adverse_move_pct_for_candidate[asset_key]
+        if threshold < 0:
+            errors.append(
+                f"hypothesis_review.max_avg_adverse_move_pct_for_candidate.{asset_key} must be zero or greater."
+            )
+
+    if config.hypothesis_review.readiness_buckets.low_below < 0 or config.hypothesis_review.readiness_buckets.low_below > 100:
+        errors.append("hypothesis_review.readiness_buckets.low_below must be between 0 and 100.")
+
+    if config.hypothesis_review.readiness_buckets.medium_below < 0 or config.hypothesis_review.readiness_buckets.medium_below > 100:
+        errors.append("hypothesis_review.readiness_buckets.medium_below must be between 0 and 100.")
+
+    if config.hypothesis_review.readiness_buckets.low_below >= config.hypothesis_review.readiness_buckets.medium_below:
+        errors.append("hypothesis_review.readiness_buckets.low_below must be less than medium_below.")
 
     if config.gold_spot_provider.provider not in ALLOWED_GOLD_SPOT_PROVIDERS:
         errors.append(
@@ -731,6 +779,33 @@ def _build_hypothesis_outcomes_config(raw_config: object) -> HypothesisOutcomeCo
         horizons_hours=sorted(dict.fromkeys(horizons)),
         neutral_move_pct=neutral_move_pct,
         max_lookback_days=int(section.get("max_lookback_days", 14)),
+    )
+
+
+def _build_hypothesis_review_config(raw_config: object) -> HypothesisReviewConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    raw_max_adverse = section.get("max_avg_adverse_move_pct_for_candidate", {})
+    max_avg_adverse = {
+        "BTC": 1.5,
+        "Gold": 0.8,
+    }
+    if isinstance(raw_max_adverse, dict):
+        for asset_key, default_value in max_avg_adverse.items():
+            max_avg_adverse[asset_key] = float(raw_max_adverse.get(asset_key, default_value))
+
+    raw_buckets = section.get("readiness_buckets", {})
+    buckets = raw_buckets if isinstance(raw_buckets, dict) else {}
+
+    return HypothesisReviewConfig(
+        enabled=_as_bool(section.get("enabled", True)),
+        min_evaluated_outcomes_for_candidate=int(section.get("min_evaluated_outcomes_for_candidate", 10)),
+        min_favorable_rate_for_candidate=float(section.get("min_favorable_rate_for_candidate", 0.55)),
+        max_unfavorable_rate_for_candidate=float(section.get("max_unfavorable_rate_for_candidate", 0.40)),
+        max_avg_adverse_move_pct_for_candidate=max_avg_adverse,
+        readiness_buckets=HypothesisReviewBucketsConfig(
+            low_below=int(buckets.get("low_below", 50)),
+            medium_below=int(buckets.get("medium_below", 70)),
+        ),
     )
 
 

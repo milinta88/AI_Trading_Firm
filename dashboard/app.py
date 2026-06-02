@@ -31,6 +31,8 @@ _DASHBOARD_DATA_ALIASES: dict[str, tuple[str, ...]] = {
     "recent_research_readiness": ("research_readiness_history",),
     "latest_strategy_hypotheses": ("strategy_hypotheses_latest",),
     "recent_strategy_hypotheses": ("strategy_hypotheses_history",),
+    "latest_hypothesis_review_summary": ("hypothesis_review_summary",),
+    "recent_hypothesis_review_summaries": ("hypothesis_review_history",),
 }
 
 
@@ -613,6 +615,78 @@ def _render_strategy_hypotheses(data: DashboardData, filters: dict[str, Any]) ->
         _hypothesis_outcome_rows(recent_outcomes),
         empty_message="No recent hypothesis outcome history matches the selected filters.",
     )
+
+    st.markdown("#### Hypothesis Review Analytics")
+    st.caption("REVIEW ONLY / NO TRADING")
+    if not getattr(data, "hypothesis_review_enabled", False):
+        st.info("Hypothesis review analytics are disabled in config.")
+        return
+
+    review_summary = getattr(data, "latest_hypothesis_review_summary", None)
+    if not review_summary:
+        st.info("No hypothesis review analytics are available yet.")
+        return
+
+    col_eval, col_fav, col_unfav, col_neutral = st.columns(4)
+    col_eval.metric("Evaluated Outcomes", review_summary.get("evaluated_outcomes", 0))
+    col_fav.metric("Favorable Rate", f"{float(review_summary.get('favorable_rate', 0.0)):.0%}")
+    col_unfav.metric("Unfavorable Rate", f"{float(review_summary.get('unfavorable_rate', 0.0)):.0%}")
+    col_neutral.metric("Neutral Rate", f"{float(review_summary.get('neutral_rate', 0.0)):.0%}")
+
+    _render_key_value_grid(
+        {
+            "Total Outcomes": review_summary.get("total_outcomes"),
+            "Insufficient Follow-Up": review_summary.get("insufficient_followup_count"),
+            "Blocked Not Evaluated": review_summary.get("blocked_not_evaluated_count"),
+            "Average Move %": review_summary.get("avg_move_pct"),
+            "Average Max Favorable Move %": review_summary.get("avg_max_favorable_move_pct"),
+            "Average Max Adverse Move %": review_summary.get("avg_max_adverse_move_pct"),
+        }
+    )
+
+    st.markdown("#### By Asset")
+    _render_table(
+        getattr(review_summary, "get", lambda *_: [])("by_asset", []),
+        empty_message="No asset-level hypothesis review analytics are available yet.",
+    )
+
+    st.markdown("#### By Strategy Family")
+    _render_table(
+        getattr(review_summary, "get", lambda *_: [])("by_strategy_family", []),
+        empty_message="No strategy-family hypothesis review analytics are available yet.",
+    )
+
+    st.markdown("#### By Regime")
+    _render_table(
+        getattr(review_summary, "get", lambda *_: [])("by_regime", []),
+        empty_message="No regime-level hypothesis review analytics are available yet.",
+    )
+
+    st.markdown("#### By Horizon")
+    _render_table(
+        getattr(review_summary, "get", lambda *_: [])("by_horizon", []),
+        empty_message="No horizon-level hypothesis review analytics are available yet.",
+    )
+
+    st.markdown("#### Readiness Buckets")
+    _render_table(
+        getattr(review_summary, "get", lambda *_: [])("by_readiness_bucket", []),
+        empty_message="No readiness-bucket analytics are available yet.",
+    )
+
+    st.markdown("#### Review Candidates")
+    _render_table(
+        getattr(review_summary, "get", lambda *_: [])("promoted_candidates", []),
+        empty_message="No review candidates have met the current thresholds yet.",
+    )
+
+    st.markdown("#### Blocked Candidates")
+    _render_table(
+        getattr(review_summary, "get", lambda *_: [])("blocked_candidates", []),
+        empty_message="No blocked candidates are available yet.",
+    )
+
+    _render_text_list("Warnings", getattr(review_summary, "get", lambda *_: [])("warnings", []))
 
 
 def _render_archive_date_filter(items: list[dict[str, Any]]) -> tuple[date | None, date | None]:

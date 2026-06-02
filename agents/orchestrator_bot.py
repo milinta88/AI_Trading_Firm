@@ -33,6 +33,7 @@ class OrchestratorBot:
         research_readiness_analyzer,
         strategy_hypothesis_engine,
         hypothesis_outcome_evaluator,
+        hypothesis_review_analyzer,
     ) -> None:
         self.config = config
         self.repository = repository
@@ -47,6 +48,7 @@ class OrchestratorBot:
         self.research_readiness_analyzer = research_readiness_analyzer
         self.strategy_hypothesis_engine = strategy_hypothesis_engine
         self.hypothesis_outcome_evaluator = hypothesis_outcome_evaluator
+        self.hypothesis_review_analyzer = hypothesis_review_analyzer
 
     def run_daily_brief(self) -> WorkflowOutcome:
         run_date = datetime.now(ZoneInfo(self.config.timezone)).date()
@@ -92,6 +94,9 @@ class OrchestratorBot:
             for outcome in hypothesis_outcomes:
                 self.repository.store_strategy_hypothesis_outcome(outcome)
             latest_hypothesis_outcomes = self.hypothesis_outcome_evaluator.load_recent(limit=8)
+            hypothesis_review_summary = self.hypothesis_review_analyzer.build_summary()
+            if self.config.hypothesis_review.enabled:
+                self.repository.store_hypothesis_review_summary(hypothesis_review_summary)
 
             report_context = DailyBriefContext(
                 run_date=run_date,
@@ -107,6 +112,7 @@ class OrchestratorBot:
                 research_readiness=research_readiness,
                 strategy_hypotheses=strategy_hypotheses,
                 hypothesis_outcomes=latest_hypothesis_outcomes,
+                hypothesis_review_summary=hypothesis_review_summary,
             )
             report_text = self.report_formatter.format(report_context)
 

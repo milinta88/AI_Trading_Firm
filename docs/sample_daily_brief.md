@@ -108,6 +108,12 @@ Hypothesis Outcomes:
 - Gold 24h: BLOCKED_NOT_EVALUATED | Direction: NO_TRADE | Family: GOLD_NO_TRADE | Move: N/A
   - Reason: Hypothesis status is BLOCKED, so outcome tracking remains informational only.
 
+Hypothesis Review Analytics:
+- Evaluated: 12 | Favorable: 7 (58%) | Unfavorable: 3 (25%) | Neutral: 2 (17%)
+- Insufficient Follow-Up: 4 | Blocked Not Evaluated: 2
+  - Review Candidate: BTC_SENTIMENT_MEAN_REVERSION (BTC) fav=58% n=12
+  - Warning: Gold review sample size is still too small for any candidate flag.
+
 Macro Regime:
 Neutral
 

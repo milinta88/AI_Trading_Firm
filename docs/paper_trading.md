@@ -240,3 +240,13 @@ Phase 2.6 adds a read-only review layer that compares persisted strategy hypothe
 - Outcomes classify persisted hypotheses as `FAVORABLE`, `UNFAVORABLE`, `NEUTRAL`, `INSUFFICIENT_FOLLOWUP_DATA`, or `BLOCKED_NOT_EVALUATED`.
 - `python main.py --hypothesis-outcomes` evaluates matured hypotheses without creating paper orders or modifying paper signal thresholds.
 - `python main.py --paper-report` and the dashboard can now summarize the latest persisted hypothesis outcomes for review only.
+
+## Phase 2.7 Hypothesis Review Analytics
+
+Phase 2.7 adds a higher-level read-only analytics layer over persisted hypothesis outcomes.
+
+- Review analytics summarize favorable, unfavorable, neutral, insufficient-follow-up, and blocked outcomes.
+- Grouping is available by asset, strategy family, regime, horizon, readiness bucket, and hypothesis status.
+- Candidate flags are review-only and require minimum sample size plus favorable/unfavorable/adverse-move thresholds.
+- `python main.py --hypothesis-review` builds and optionally persists local review summaries without creating paper orders.
+- `python main.py --paper-report` and the dashboard can summarize the latest persisted review analytics for research-only review.

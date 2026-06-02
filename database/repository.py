@@ -10,6 +10,7 @@ from pathlib import Path
 from core.models import (
     AnalysisResult,
     HypothesisOutcome,
+    HypothesisReviewSummary,
     MarketDataPoint,
     ResearchReadinessResult,
     RiskStatus,
@@ -350,6 +351,70 @@ class WorkflowRepository:
             "Stored strategy hypothesis outcome for %s horizon %sh.",
             outcome.asset,
             outcome.horizon_hours,
+        )
+
+    def store_hypothesis_review_summary(self, summary: HypothesisReviewSummary) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO hypothesis_review_summaries (
+                    created_at,
+                    lookback_days,
+                    total_outcomes,
+                    evaluated_outcomes,
+                    favorable_count,
+                    unfavorable_count,
+                    neutral_count,
+                    insufficient_followup_count,
+                    blocked_not_evaluated_count,
+                    favorable_rate,
+                    unfavorable_rate,
+                    neutral_rate,
+                    by_asset_json,
+                    by_strategy_family_json,
+                    by_regime_json,
+                    by_horizon_json,
+                    by_readiness_bucket_json,
+                    by_hypothesis_status_json,
+                    avg_move_pct,
+                    avg_max_favorable_move_pct,
+                    avg_max_adverse_move_pct,
+                    promoted_candidates_json,
+                    blocked_candidates_json,
+                    warnings_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    (summary.created_at or datetime.now(UTC)).isoformat(),
+                    int(summary.lookback_days or 0),
+                    summary.total_outcomes,
+                    summary.evaluated_outcomes,
+                    summary.favorable_count,
+                    summary.unfavorable_count,
+                    summary.neutral_count,
+                    summary.insufficient_followup_count,
+                    summary.blocked_not_evaluated_count,
+                    summary.favorable_rate,
+                    summary.unfavorable_rate,
+                    summary.neutral_rate,
+                    json.dumps(summary.by_asset),
+                    json.dumps(summary.by_strategy_family),
+                    json.dumps(summary.by_regime),
+                    json.dumps(summary.by_horizon),
+                    json.dumps(summary.by_readiness_bucket),
+                    json.dumps(summary.by_hypothesis_status),
+                    summary.avg_move_pct,
+                    summary.avg_max_favorable_move_pct,
+                    summary.avg_max_adverse_move_pct,
+                    json.dumps(summary.promoted_candidates),
+                    json.dumps(summary.blocked_candidates),
+                    json.dumps(summary.warnings),
+                ),
+            )
+        logger.info(
+            "Stored hypothesis review summary for %s evaluated outcomes.",
+            summary.evaluated_outcomes,
         )
 
     def _connect(self) -> sqlite3.Connection:

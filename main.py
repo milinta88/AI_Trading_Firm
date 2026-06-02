@@ -11,6 +11,7 @@ from agents.data_quality_bot import DataQualityBot
 from agents.gold_fundamental_bot import GoldFundamentalBot
 from agents.orchestrator_bot import OrchestratorBot
 from analytics.hypothesis_outcomes import HypothesisOutcomeEvaluator
+from analytics.hypothesis_review import HypothesisReviewAnalyzer
 from analytics.research_readiness import ResearchReadinessAnalyzer
 from analytics.strategy_hypothesis import StrategyHypothesisEngine
 from analytics.trend_analyzer import TrendAnalyzer
@@ -69,6 +70,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--hypothesis-outcomes",
         action="store_true",
         help="Evaluate matured persisted strategy hypotheses against later persisted market snapshots only.",
+    )
+    parser.add_argument(
+        "--hypothesis-review",
+        action="store_true",
+        help="Build read-only hypothesis review analytics from persisted hypothesis outcomes only.",
     )
     return parser.parse_args(argv)
 
@@ -136,6 +142,11 @@ def build_orchestrator(config: AppConfig, telegram_runtime: TelegramRuntimeSetti
             config=config.hypothesis_outcomes,
             database_path=config.database_path,
         ),
+        hypothesis_review_analyzer=HypothesisReviewAnalyzer(
+            database_path=config.database_path,
+            config=config.hypothesis_review,
+            lookback_days=config.hypothesis_outcomes.max_lookback_days,
+        ),
     )
 
 
@@ -200,6 +211,15 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             logger.exception("Strategy hypothesis outcome evaluation failed.")
             return 1
+    if args.hypothesis_review:
+        logger.info("Building hypothesis review analytics.")
+        try:
+            initialize_database(config.database_path)
+            print(build_hypothesis_review_report(config))
+            return 0
+        except Exception:
+            logger.exception("Hypothesis review analytics failed.")
+            return 1
 
     workflow_label = "Telegram test" if runtime_options.test_telegram else "daily brief"
     logger.info("Starting %s %s workflow in %s mode.", config.app_name, workflow_label, config.mode)
@@ -263,12 +283,21 @@ def build_paper_report(config: AppConfig) -> str:
         config=config.hypothesis_outcomes,
         database_path=config.database_path,
     ).load_recent(limit=8)
+    hypothesis_review_analyzer = HypothesisReviewAnalyzer(
+        database_path=config.database_path,
+        config=config.hypothesis_review,
+        lookback_days=config.hypothesis_outcomes.max_lookback_days,
+    )
+    hypothesis_review_summary = hypothesis_review_analyzer.load_latest_summary()
+    if hypothesis_review_summary is None and config.hypothesis_review.enabled:
+        hypothesis_review_summary = hypothesis_review_analyzer.build_summary()
     return formatter.format(
         analytics,
         paper_signal_summary=asdict(config.paper_signal),
         research_readiness=research_readiness,
         strategy_hypotheses=strategy_hypotheses,
         hypothesis_outcomes=hypothesis_outcomes,
+        hypothesis_review_summary=hypothesis_review_summary,
     )
 
 
@@ -325,6 +354,53 @@ def evaluate_hypothesis_outcomes(config: AppConfig) -> str:
                 "No matured strategy hypothesis outcomes were eligible for evaluation yet.",
             ]
         )
+    return "\n".join(lines)
+
+
+def build_hypothesis_review_report(config: AppConfig) -> str:
+    analyzer = HypothesisReviewAnalyzer(
+        database_path=config.database_path,
+        config=config.hypothesis_review,
+        lookback_days=config.hypothesis_outcomes.max_lookback_days,
+    )
+    summary = analyzer.build_summary()
+    repository = WorkflowRepository(config.database_path)
+    if config.hypothesis_review.enabled:
+        repository.store_hypothesis_review_summary(summary)
+
+    lines = [
+        "HYPOTHESIS REVIEW ANALYTICS",
+        "REVIEW ONLY",
+        "NO TRADING",
+        "",
+        f"Lookback Days: {summary.lookback_days}",
+        f"Total Outcomes: {summary.total_outcomes}",
+        f"Evaluated Outcomes: {summary.evaluated_outcomes}",
+        f"Favorable: {summary.favorable_count}",
+        f"Unfavorable: {summary.unfavorable_count}",
+        f"Neutral: {summary.neutral_count}",
+        f"Insufficient Follow-Up Data: {summary.insufficient_followup_count}",
+        f"Blocked Not Evaluated: {summary.blocked_not_evaluated_count}",
+        f"Favorable Rate: {summary.favorable_rate:.2%}",
+        f"Unfavorable Rate: {summary.unfavorable_rate:.2%}",
+        f"Neutral Rate: {summary.neutral_rate:.2%}",
+    ]
+    if summary.promoted_candidates:
+        lines.extend(["", "Review Candidates:"])
+        for candidate in summary.promoted_candidates[:10]:
+            lines.append(
+                f"- {candidate['strategy_family']} | Asset {candidate['asset']} | "
+                f"Evaluated {candidate['evaluated_outcomes']} | Favorable {candidate['favorable_rate']:.2%}"
+            )
+    if summary.warnings:
+        lines.extend(["", "Warnings:"])
+        lines.extend(f"- {warning}" for warning in summary.warnings[:10])
+    if not summary.promoted_candidates and summary.blocked_candidates:
+        lines.extend(["", "Blocked Candidates:"])
+        for candidate in summary.blocked_candidates[:10]:
+            lines.append(
+                f"- {candidate['strategy_family']} | Asset {candidate['asset']} | {candidate['reason']}"
+            )
     return "\n".join(lines)
 
 

@@ -13,10 +13,13 @@ import yaml
 
 from analytics.research_readiness import ResearchReadinessAnalyzer
 from analytics.data_hygiene import DataHygieneAnalyzer
+from analytics.hypothesis_review import HypothesisReviewAnalyzer
 from analytics.report_archive import ArchiveQuery, ReportArchive
 from analytics.trend_analyzer import TrendAnalyzer
 from core.config import (
     DEFAULT_RESEARCH_STALE_AFTER_MINUTES,
+    HypothesisReviewBucketsConfig,
+    HypothesisReviewConfig,
     PAPER_SIGNAL_PROFILE_PRESETS,
     ResearchReadinessConfig,
 )
@@ -103,6 +106,7 @@ class DashboardData:
     strategy_hypotheses_enabled: bool = False
     hypothesis_outcomes_enabled: bool = False
     hypothesis_outcome_horizons: list[int] = field(default_factory=list)
+    hypothesis_review_enabled: bool = False
     latest_workflow_run: dict[str, Any] | None = None
     latest_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
     recent_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
@@ -149,6 +153,8 @@ class DashboardData:
     latest_hypothesis_outcomes: list[dict[str, Any]] = field(default_factory=list)
     recent_hypothesis_outcomes: list[dict[str, Any]] = field(default_factory=list)
     hypothesis_outcome_summary: dict[str, Any] = field(default_factory=_default_hypothesis_outcome_summary)
+    latest_hypothesis_review_summary: dict[str, Any] | None = None
+    recent_hypothesis_review_summaries: list[dict[str, Any]] = field(default_factory=list)
     paper_signal_config: dict[str, Any] | None = field(
         default_factory=lambda: _default_paper_signal_config("conservative")
     )
@@ -167,6 +173,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
         hypothesis_outcomes_enabled,
         hypothesis_outcome_horizons,
         hypothesis_outcome_max_lookback_days,
+        hypothesis_review_config,
         database_path,
     ) = load_dashboard_config(project_root)
 
@@ -181,6 +188,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             strategy_hypotheses_enabled=strategy_hypotheses_enabled,
             hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
             hypothesis_outcome_horizons=hypothesis_outcome_horizons,
+            hypothesis_review_enabled=hypothesis_review_config.enabled,
             paper_signal_config=paper_signal_config,
             message=f"Database not found at {database_path}. Run python main.py --dry-run first.",
         )
@@ -209,6 +217,12 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 horizons_hours=hypothesis_outcome_horizons,
                 max_lookback_days=hypothesis_outcome_max_lookback_days,
             )
+            hypothesis_review = _load_hypothesis_review(
+                database_path=database_path,
+                config=hypothesis_review_config,
+                lookback_days=hypothesis_outcome_max_lookback_days,
+                limit=limit,
+            )
             return DashboardData(
                 database_available=True,
                 database_message=f"Connected read-only to {database_path}.",
@@ -222,6 +236,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 strategy_hypotheses_enabled=strategy_hypotheses_enabled,
                 hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
                 hypothesis_outcome_horizons=hypothesis_outcome_horizons,
+                hypothesis_review_enabled=hypothesis_review_config.enabled,
                 paper_signal_config=paper_signal_config,
                 latest_workflow_run=_fetch_latest_workflow_run(connection),
                 latest_market_snapshots=latest_market_snapshots,
@@ -267,6 +282,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 latest_hypothesis_outcomes=latest_hypothesis_outcomes,
                 recent_hypothesis_outcomes=recent_hypothesis_outcomes,
                 hypothesis_outcome_summary=hypothesis_outcome_summary,
+                latest_hypothesis_review_summary=hypothesis_review["latest_summary"],
+                recent_hypothesis_review_summaries=hypothesis_review["recent_summaries"],
             )
     except sqlite3.Error as exc:
         return _empty_dashboard_data(
@@ -279,6 +296,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             strategy_hypotheses_enabled=strategy_hypotheses_enabled,
             hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
             hypothesis_outcome_horizons=hypothesis_outcome_horizons,
+            hypothesis_review_enabled=hypothesis_review_config.enabled,
             paper_signal_config=paper_signal_config,
             message=f"Unable to read dashboard database: {exc}",
         )
@@ -286,7 +304,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
 
 def load_dashboard_config(
     project_root: Path,
-) -> tuple[str, bool, bool, float, dict[str, Any], ResearchReadinessConfig, bool, bool, list[int], int, Path]:
+) -> tuple[str, bool, bool, float, dict[str, Any], ResearchReadinessConfig, bool, bool, list[int], int, HypothesisReviewConfig, Path]:
     config_path = project_root / "config.yaml"
     if not config_path.exists():
         return (
@@ -300,6 +318,7 @@ def load_dashboard_config(
             False,
             [4, 24, 72],
             14,
+            _default_hypothesis_review_config(),
             project_root / "data" / "database.db",
         )
 
@@ -318,6 +337,7 @@ def load_dashboard_config(
             False,
             [4, 24, 72],
             14,
+            _default_hypothesis_review_config(),
             project_root / "data" / "database.db",
         )
 
@@ -328,6 +348,7 @@ def load_dashboard_config(
     research_readiness_section = raw_config.get("research_readiness", {})
     strategy_hypotheses_section = raw_config.get("strategy_hypotheses", {})
     hypothesis_outcomes_section = raw_config.get("hypothesis_outcomes", {})
+    hypothesis_review_section = raw_config.get("hypothesis_review", {})
     database_section = raw_config.get("database", {})
     database_path = Path(str(database_section.get("path", "data/database.db")))
     if not database_path.is_absolute():
@@ -345,6 +366,7 @@ def load_dashboard_config(
             _as_bool(hypothesis_outcomes_section.get("enabled", False)),
             _load_hypothesis_outcome_horizons(hypothesis_outcomes_section),
             int(hypothesis_outcomes_section.get("max_lookback_days", 14)),
+            _load_hypothesis_review_config(hypothesis_review_section),
             database_path,
         )
     except Exception:
@@ -359,6 +381,7 @@ def load_dashboard_config(
             False,
             [4, 24, 72],
             14,
+            _default_hypothesis_review_config(),
             database_path,
         )
 
@@ -502,6 +525,7 @@ def _empty_dashboard_data(
     strategy_hypotheses_enabled: bool,
     hypothesis_outcomes_enabled: bool,
     hypothesis_outcome_horizons: list[int],
+    hypothesis_review_enabled: bool,
     paper_signal_config: dict[str, Any],
     message: str,
 ) -> DashboardData:
@@ -519,6 +543,7 @@ def _empty_dashboard_data(
         strategy_hypotheses_enabled=strategy_hypotheses_enabled,
         hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
         hypothesis_outcome_horizons=list(hypothesis_outcome_horizons),
+        hypothesis_review_enabled=hypothesis_review_enabled,
         paper_signal_config=paper_signal_config,
         paper_analytics_summary=_default_paper_analytics_summary(paper_trading_starting_equity),
         paper_signal_review_summary=_default_paper_signal_review_summary(
@@ -572,6 +597,26 @@ def _load_paper_analytics(database_path: Path, starting_equity: float, limit: in
         "rejection_reasons": report.rejection_reasons,
         "no_trade_reasons": report.no_trade_reasons,
         "recent_signal_reviews": report.recent_signal_reviews,
+    }
+
+
+def _load_hypothesis_review(
+    *,
+    database_path: Path,
+    config: HypothesisReviewConfig,
+    lookback_days: int,
+    limit: int,
+) -> dict[str, Any]:
+    analyzer = HypothesisReviewAnalyzer(
+        database_path=database_path,
+        config=config,
+        lookback_days=lookback_days,
+    )
+    latest_summary = analyzer.load_latest_summary() or analyzer.build_summary()
+    recent_summaries = analyzer.load_recent_summaries(limit=limit)
+    return {
+        "latest_summary": asdict(latest_summary) if latest_summary else None,
+        "recent_summaries": [asdict(summary) for summary in recent_summaries],
     }
 
 
@@ -643,6 +688,17 @@ def _default_research_readiness_config() -> ResearchReadinessConfig:
     )
 
 
+def _default_hypothesis_review_config() -> HypothesisReviewConfig:
+    return HypothesisReviewConfig(
+        enabled=False,
+        min_evaluated_outcomes_for_candidate=10,
+        min_favorable_rate_for_candidate=0.55,
+        max_unfavorable_rate_for_candidate=0.40,
+        max_avg_adverse_move_pct_for_candidate={"BTC": 1.5, "Gold": 0.8},
+        readiness_buckets=HypothesisReviewBucketsConfig(low_below=50, medium_below=70),
+    )
+
+
 def _load_hypothesis_outcome_horizons(raw_config: object) -> list[int]:
     section = raw_config if isinstance(raw_config, dict) else {}
     raw_horizons = section.get("horizons_hours", [4, 24, 72])
@@ -650,6 +706,29 @@ def _load_hypothesis_outcome_horizons(raw_config: object) -> list[int]:
         return [4, 24, 72]
     horizons = [int(item) for item in raw_horizons]
     return sorted(dict.fromkeys(horizons))
+
+
+def _load_hypothesis_review_config(raw_config: object) -> HypothesisReviewConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    raw_thresholds = section.get("max_avg_adverse_move_pct_for_candidate", {})
+    thresholds = {"BTC": 1.5, "Gold": 0.8}
+    if isinstance(raw_thresholds, dict):
+        for asset_key, default_value in thresholds.items():
+            thresholds[asset_key] = float(raw_thresholds.get(asset_key, default_value))
+
+    raw_buckets = section.get("readiness_buckets", {})
+    bucket_values = raw_buckets if isinstance(raw_buckets, dict) else {}
+    return HypothesisReviewConfig(
+        enabled=_as_bool(section.get("enabled", False)),
+        min_evaluated_outcomes_for_candidate=int(section.get("min_evaluated_outcomes_for_candidate", 10)),
+        min_favorable_rate_for_candidate=float(section.get("min_favorable_rate_for_candidate", 0.55)),
+        max_unfavorable_rate_for_candidate=float(section.get("max_unfavorable_rate_for_candidate", 0.40)),
+        max_avg_adverse_move_pct_for_candidate=thresholds,
+        readiness_buckets=HypothesisReviewBucketsConfig(
+            low_below=int(bucket_values.get("low_below", 50)),
+            medium_below=int(bucket_values.get("medium_below", 70)),
+        ),
+    )
 
 
 def _numeric_market_value(row: dict[str, Any]) -> float | None:
