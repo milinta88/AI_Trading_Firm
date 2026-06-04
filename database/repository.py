@@ -9,6 +9,7 @@ from pathlib import Path
 
 from core.models import (
     AnalysisResult,
+    HypothesisEdgeSliceSummary,
     HypothesisOutcome,
     HypothesisReviewSummary,
     MarketDataPoint,
@@ -419,6 +420,92 @@ class WorkflowRepository:
             "Stored hypothesis review summary for %s evaluated outcomes.",
             summary.evaluated_outcomes,
         )
+
+    def store_hypothesis_edge_slice_summary(self, summary: HypothesisEdgeSliceSummary) -> int:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO hypothesis_edge_slice_summaries (
+                    created_at,
+                    lookback_days,
+                    total_slices,
+                    strongest_slices_json,
+                    weakest_slices_json,
+                    unstable_slices_json,
+                    warnings_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    summary.generated_at.isoformat(),
+                    summary.lookback_days,
+                    summary.total_slices,
+                    json.dumps([asdict(row) for row in summary.strongest_slices]),
+                    json.dumps([asdict(row) for row in summary.weakest_slices]),
+                    json.dumps([asdict(row) for row in summary.unstable_slices]),
+                    json.dumps(summary.warnings),
+                ),
+            )
+            summary_id = int(cursor.lastrowid)
+            for row in summary.slice_rows:
+                connection.execute(
+                    """
+                    INSERT INTO hypothesis_edge_slice_rows (
+                        summary_id,
+                        slice_key,
+                        asset,
+                        strategy_family,
+                        regime,
+                        horizon_hours,
+                        readiness_bucket,
+                        confidence_bucket,
+                        weekday,
+                        sample_size,
+                        favorable_count,
+                        unfavorable_count,
+                        neutral_count,
+                        favorable_rate,
+                        unfavorable_rate,
+                        neutral_rate,
+                        avg_move_pct,
+                        avg_max_favorable_move_pct,
+                        avg_max_adverse_move_pct,
+                        stability_status,
+                        candidate_status,
+                        warnings_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        summary_id,
+                        row.slice_key,
+                        row.asset,
+                        row.strategy_family,
+                        row.regime,
+                        row.horizon_hours,
+                        row.readiness_bucket,
+                        row.confidence_bucket,
+                        row.weekday,
+                        row.sample_size,
+                        row.favorable_count,
+                        row.unfavorable_count,
+                        row.neutral_count,
+                        row.favorable_rate,
+                        row.unfavorable_rate,
+                        row.neutral_rate,
+                        row.avg_move_pct,
+                        row.avg_max_favorable_move_pct,
+                        row.avg_max_adverse_move_pct,
+                        row.stability_status,
+                        row.candidate_status,
+                        json.dumps(row.warnings),
+                    ),
+                )
+        logger.info(
+            "Stored hypothesis edge slicing summary with %s slices.",
+            summary.total_slices,
+        )
+        return summary_id
 
     def add_hypothesis_review_note(
         self,

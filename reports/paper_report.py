@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.models import HypothesisOutcome, HypothesisReviewSummary, ResearchReadinessResult, StrategyHypothesis
+from core.models import (
+    HypothesisEdgeSliceSummary,
+    HypothesisOutcome,
+    HypothesisReviewSummary,
+    ResearchReadinessResult,
+    StrategyHypothesis,
+)
 from paper_trading.analytics import PaperAnalyticsReport
 
 
@@ -17,6 +23,7 @@ class PaperTradingReportFormatter:
         strategy_hypotheses: dict[str, StrategyHypothesis] | None = None,
         hypothesis_outcomes: list[HypothesisOutcome] | None = None,
         hypothesis_review_summary: HypothesisReviewSummary | None = None,
+        hypothesis_edge_slice_summary: HypothesisEdgeSliceSummary | None = None,
     ) -> str:
         performance = report.performance
         signal_review = report.signal_review
@@ -180,6 +187,15 @@ class PaperTradingReportFormatter:
                 ]
             )
 
+        if hypothesis_edge_slice_summary:
+            lines.extend(
+                [
+                    "",
+                    "Hypothesis Edge Slicing:",
+                    *_format_hypothesis_edge_slicing_summary(hypothesis_edge_slice_summary),
+                ]
+            )
+
         if report.latest_run_summary:
             lines.extend(
                 [
@@ -320,6 +336,44 @@ def _format_hypothesis_review_summary(summary: HypothesisReviewSummary) -> list[
         lines.extend(
             f"- {candidate['strategy_family']} | {candidate['reason']}"
             for candidate in summary.blocked_candidates[:5]
+        )
+    if summary.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in summary.warnings[:5])
+    return lines
+
+
+def _format_hypothesis_edge_slicing_summary(summary: HypothesisEdgeSliceSummary) -> list[str]:
+    lines = [
+        f"Total Slices: {summary.total_slices}",
+        f"Lookback Days: {summary.lookback_days}",
+        f"Strongest Slices: {len(summary.strongest_slices)}",
+        f"Weakest Slices: {len(summary.weakest_slices)}",
+        f"Unstable Slices: {len(summary.unstable_slices)}",
+        "No automatic promotion or trading occurs from edge slicing analytics.",
+    ]
+    if summary.strongest_slices:
+        lines.append("Strongest Slice:")
+        strongest = summary.strongest_slices[0]
+        lines.append(
+            f"- {strongest.asset} | {strongest.strategy_family} | {strongest.regime} | "
+            f"{strongest.horizon_hours}h | {strongest.stability_status} | "
+            f"fav={strongest.favorable_rate:.0%} | n={strongest.sample_size}"
+        )
+    if summary.weakest_slices:
+        lines.append("Weakest Slice:")
+        weakest = summary.weakest_slices[0]
+        lines.append(
+            f"- {weakest.asset} | {weakest.strategy_family} | {weakest.regime} | "
+            f"{weakest.horizon_hours}h | {weakest.stability_status} | "
+            f"unfav={weakest.unfavorable_rate:.0%} | adverse={_format_optional_float(weakest.avg_max_adverse_move_pct)}"
+        )
+    if summary.unstable_slices:
+        lines.append("Unstable / Sample-Limited Slice:")
+        unstable = summary.unstable_slices[0]
+        lines.append(
+            f"- {unstable.asset} | {unstable.strategy_family} | {unstable.regime} | "
+            f"{unstable.horizon_hours}h | {unstable.stability_status} | n={unstable.sample_size}"
         )
     if summary.warnings:
         lines.append("Warnings:")

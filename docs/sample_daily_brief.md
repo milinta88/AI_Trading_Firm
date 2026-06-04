@@ -115,6 +115,13 @@ Hypothesis Review Analytics:
   - Candidate Progress: GOLD_MACRO_PRESSURE (Gold) NEED_MORE_SAMPLES n=4/10
   - Warning: Gold review sample size is still too small for any candidate flag.
 
+Hypothesis Edge Slicing:
+- Total Slices: 6 | Strongest: 1 | Weakest: 2 | Unstable: 3
+- REVIEW ONLY. No automatic promotion or trading occurs from edge slicing analytics.
+  - Strongest: BTC BTC_SENTIMENT_MEAN_REVERSION TREND_DOWN 24h STRONG_POSITIVE fav=67% n=12
+  - Weakest: Gold GOLD_USD_DXY_CONFIRMATION MACRO_BEARISH 24h HIGH_ADVERSE_MOVE unfav=50% n=10
+  - Warning: 3 slices remain below the minimum sample size of 10.
+
 Macro Regime:
 Neutral
 

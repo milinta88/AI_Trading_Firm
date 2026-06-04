@@ -127,3 +127,14 @@ hypothesis_review:
   readiness_buckets:
     low_below: 50
     medium_below: 70
+
+hypothesis_edge_slicing:
+  enabled: true
+  lookback_days: 90
+  min_samples_per_slice: 10
+  strong_favorable_rate: 0.60
+  weak_favorable_rate: 0.45
+  max_unfavorable_rate: 0.40
+  max_avg_adverse_move_pct:
+    BTC: 1.5
+    Gold: 0.8

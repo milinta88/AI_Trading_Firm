@@ -21,6 +21,8 @@ def test_load_config_defaults_to_dry_run_without_telegram_credentials(tmp_path: 
     assert config.hypothesis_outcomes.horizons_hours == [4, 24, 72]
     assert config.hypothesis_review.enabled is True
     assert config.hypothesis_review.min_favorable_rate_for_candidate == 0.55
+    assert config.hypothesis_edge_slicing.enabled is True
+    assert config.hypothesis_edge_slicing.lookback_days == 90
     assert config.telegram_status.mode == "DRY_RUN"
     assert runtime.mode == "DRY_RUN"
     assert runtime.allow_live_sends is False

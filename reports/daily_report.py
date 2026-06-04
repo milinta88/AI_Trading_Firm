@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.models import (
     DailyBriefContext,
+    HypothesisEdgeSliceSummary,
     HypothesisOutcome,
     HypothesisReviewSummary,
     MarketDataPoint,
@@ -92,6 +93,9 @@ class DailyReportFormatter:
             "",
             "Hypothesis Review Analytics:",
             *self._format_hypothesis_review_summary(brief.hypothesis_review_summary),
+            "",
+            "Hypothesis Edge Slicing:",
+            *self._format_hypothesis_edge_slicing_summary(brief.hypothesis_edge_slice_summary),
             "",
             "Macro Regime:",
             brief.macro_regime,
@@ -285,6 +289,37 @@ class DailyReportFormatter:
                 )
         for warning in summary.warnings[:2]:
             lines.append(f"  - Warning: {warning}")
+        return lines
+
+    @staticmethod
+    def _format_hypothesis_edge_slicing_summary(summary: HypothesisEdgeSliceSummary | None) -> list[str]:
+        if summary is None:
+            return ["- Not available yet."]
+
+        lines = [
+            (
+                f"- Total Slices: {summary.total_slices} | Strongest: {len(summary.strongest_slices)} | "
+                f"Weakest: {len(summary.weakest_slices)} | Unstable: {len(summary.unstable_slices)}"
+            ),
+            "- REVIEW ONLY. No automatic promotion or trading occurs from edge slicing analytics.",
+        ]
+        if summary.strongest_slices:
+            strongest = summary.strongest_slices[0]
+            lines.append(
+                f"  - Strongest: {strongest.asset} {strongest.strategy_family} {strongest.regime} "
+                f"{strongest.horizon_hours}h {strongest.stability_status} fav={strongest.favorable_rate:.0%} "
+                f"n={strongest.sample_size}"
+            )
+        if summary.weakest_slices:
+            weakest = summary.weakest_slices[0]
+            lines.append(
+                f"  - Weakest: {weakest.asset} {weakest.strategy_family} {weakest.regime} "
+                f"{weakest.horizon_hours}h {weakest.stability_status} unfav={weakest.unfavorable_rate:.0%} "
+                f"n={weakest.sample_size}"
+            )
+        if summary.warnings:
+            for warning in summary.warnings[:2]:
+                lines.append(f"  - Warning: {warning}")
         return lines
 
     @staticmethod

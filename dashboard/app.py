@@ -13,7 +13,7 @@ from analytics.hypothesis_review_export import (
     HYPOTHESIS_REVIEW_SUMMARY_HEADERS,
     HypothesisReviewExportService,
 )
-from core.config import HypothesisReviewBucketsConfig, HypothesisReviewConfig
+from core.config import HypothesisEdgeSlicingConfig, HypothesisReviewBucketsConfig, HypothesisReviewConfig
 from database.repository import WorkflowRepository
 from database.init_db import initialize_database
 from dashboard.data_loader import DashboardData, filter_rows, load_dashboard_data, rows_to_csv
@@ -41,6 +41,9 @@ _DASHBOARD_DATA_ALIASES: dict[str, tuple[str, ...]] = {
     "recent_strategy_hypotheses": ("strategy_hypotheses_history",),
     "latest_hypothesis_review_summary": ("hypothesis_review_summary",),
     "recent_hypothesis_review_summaries": ("hypothesis_review_history",),
+    "latest_hypothesis_edge_slice_summary": ("hypothesis_edge_slice_summary",),
+    "recent_hypothesis_edge_slice_summaries": ("hypothesis_edge_slice_history",),
+    "hypothesis_edge_slice_rows": ("hypothesis_edge_slices",),
 }
 
 
@@ -748,6 +751,7 @@ def _render_strategy_hypotheses(data: DashboardData, filters: dict[str, Any]) ->
         empty_message="No persisted hypothesis review summary history is available yet.",
     )
 
+    _render_hypothesis_edge_slicing(data)
     _render_text_list("Warnings", filtered_summary.get("warnings", []))
     _render_hypothesis_review_notes(data, review_filters)
 
@@ -1725,6 +1729,293 @@ def _render_hypothesis_review_notes(data: DashboardData, filters: dict[str, Any]
         _hypothesis_review_note_rows(filtered_notes),
         empty_message="No hypothesis review notes match the selected drilldown filters.",
     )
+
+
+def _render_hypothesis_edge_slicing(data: DashboardData) -> None:
+    data = _coerce_dashboard_data(data)
+    st.markdown("#### Hypothesis Edge Slicing")
+    st.caption("REVIEW ONLY / NO TRADING")
+
+    if not getattr(data, "hypothesis_edge_slicing_enabled", False):
+        st.info("Hypothesis edge slicing is disabled in config.")
+        return
+
+    summary = getattr(data, "latest_hypothesis_edge_slice_summary", None) or {}
+    slice_rows = list(getattr(data, "hypothesis_edge_slice_rows", []))
+    config = _coerce_hypothesis_edge_config(getattr(data, "hypothesis_edge_slicing_config", None))
+
+    if not summary and not slice_rows:
+        st.info("No hypothesis edge slicing analytics are available yet.")
+        return
+
+    edge_filters = _render_hypothesis_edge_filters(slice_rows)
+    filtered_rows = _filter_hypothesis_edge_rows(
+        slice_rows,
+        asset=edge_filters.get("asset"),
+        strategy_family=edge_filters.get("strategy_family"),
+        regime=edge_filters.get("regime"),
+        horizon_hours=edge_filters.get("horizon_hours"),
+        readiness_bucket=edge_filters.get("readiness_bucket"),
+        confidence_bucket=edge_filters.get("confidence_bucket"),
+        weekday=edge_filters.get("weekday"),
+        stability_status=edge_filters.get("stability_status"),
+    )
+
+    col_total, col_strong, col_weak, col_unstable = st.columns(4)
+    col_total.metric("Total Slices", len(filtered_rows) if filtered_rows else int(summary.get("total_slices", 0)))
+    col_strong.metric(
+        "Strong Positive",
+        sum(1 for row in filtered_rows if str(row.get("stability_status")) == "STRONG_POSITIVE")
+        if filtered_rows
+        else len(summary.get("strongest_slices", [])),
+    )
+    col_weak.metric(
+        "Weak / Negative",
+        sum(
+            1
+            for row in filtered_rows
+            if str(row.get("stability_status")) in {"WEAK_POSITIVE", "NEGATIVE", "HIGH_ADVERSE_MOVE"}
+        )
+        if filtered_rows
+        else len(summary.get("weakest_slices", [])),
+    )
+    col_unstable.metric(
+        "Sample / Unstable",
+        sum(
+            1
+            for row in filtered_rows
+            if str(row.get("stability_status")) in {"INSUFFICIENT_SAMPLE", "MIXED_OR_UNSTABLE", "NEUTRAL"}
+        )
+        if filtered_rows
+        else len(summary.get("unstable_slices", [])),
+    )
+
+    st.download_button(
+        label="Download slice rows CSV",
+        data=rows_to_csv(_hypothesis_edge_slice_rows(filtered_rows or slice_rows)),
+        file_name="hypothesis_edge_slice_rows.csv",
+        mime="text/csv",
+    )
+
+    strongest = filtered_rows and [
+        row for row in filtered_rows if str(row.get("stability_status")) in {"STRONG_POSITIVE", "WEAK_POSITIVE"}
+    ] or summary.get("strongest_slices", [])
+    weakest = filtered_rows and [
+        row for row in filtered_rows if str(row.get("stability_status")) in {"NEGATIVE", "HIGH_ADVERSE_MOVE"}
+    ] or summary.get("weakest_slices", [])
+    unstable = filtered_rows and [
+        row
+        for row in filtered_rows
+        if str(row.get("stability_status")) in {"INSUFFICIENT_SAMPLE", "MIXED_OR_UNSTABLE", "NEUTRAL"}
+    ] or summary.get("unstable_slices", [])
+
+    st.markdown("#### Strongest Slices")
+    _render_table(
+        _hypothesis_edge_slice_rows(strongest[:10]),
+        empty_message="No strongest slices are available yet.",
+    )
+
+    st.markdown("#### Weakest Slices")
+    _render_table(
+        _hypothesis_edge_slice_rows(weakest[:10]),
+        empty_message="No weakest slices are available yet.",
+    )
+
+    st.markdown("#### Unstable / Sample-Limited Slices")
+    _render_table(
+        _hypothesis_edge_slice_rows(unstable[:10]),
+        empty_message="No unstable slice warnings are available yet.",
+    )
+
+    sample_warnings = [
+        warning
+        for warning in summary.get("warnings", [])
+        if "sample size" in str(warning).lower() or "minimum sample" in str(warning).lower()
+    ]
+    _render_text_list("Sample-Size Warnings", sample_warnings)
+    _render_text_list("Edge Slicing Warnings", summary.get("warnings", []))
+
+    st.markdown("#### Slice Rows")
+    _render_table(
+        _hypothesis_edge_slice_rows(filtered_rows or slice_rows),
+        empty_message="No edge slice rows match the selected filters.",
+    )
+
+    st.markdown("#### Edge Slicing Summary History")
+    _render_table(
+        _hypothesis_edge_summary_rows(getattr(data, "recent_hypothesis_edge_slice_summaries", [])),
+        empty_message="No persisted edge slicing summary history is available yet.",
+    )
+
+    st.caption(
+        "Candidate labels here are review-only heuristics. They do not promote paper trading, create orders, or enable execution."
+    )
+    st.caption(
+        f"Current slice thresholds: strong>={config.strong_favorable_rate:.0%}, weak>={config.weak_favorable_rate:.0%}, "
+        f"max unfavorable<={config.max_unfavorable_rate:.0%}, min samples={config.min_samples_per_slice}."
+    )
+
+
+def _coerce_hypothesis_edge_config(raw_config: Any) -> HypothesisEdgeSlicingConfig:
+    if isinstance(raw_config, HypothesisEdgeSlicingConfig):
+        return raw_config
+    if isinstance(raw_config, dict):
+        raw_thresholds = raw_config.get("max_avg_adverse_move_pct", {})
+        thresholds = {"BTC": 1.5, "Gold": 0.8}
+        if isinstance(raw_thresholds, dict):
+            for asset_key, default_value in thresholds.items():
+                thresholds[asset_key] = float(raw_thresholds.get(asset_key, default_value))
+        return HypothesisEdgeSlicingConfig(
+            enabled=bool(raw_config.get("enabled", False)),
+            lookback_days=int(raw_config.get("lookback_days", 90)),
+            min_samples_per_slice=int(raw_config.get("min_samples_per_slice", 10)),
+            strong_favorable_rate=float(raw_config.get("strong_favorable_rate", 0.60)),
+            weak_favorable_rate=float(raw_config.get("weak_favorable_rate", 0.45)),
+            max_unfavorable_rate=float(raw_config.get("max_unfavorable_rate", 0.40)),
+            max_avg_adverse_move_pct=thresholds,
+        )
+    return HypothesisEdgeSlicingConfig(
+        enabled=False,
+        lookback_days=90,
+        min_samples_per_slice=10,
+        strong_favorable_rate=0.60,
+        weak_favorable_rate=0.45,
+        max_unfavorable_rate=0.40,
+        max_avg_adverse_move_pct={"BTC": 1.5, "Gold": 0.8},
+    )
+
+
+def _render_hypothesis_edge_filters(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    assets = sorted({str(row.get("asset")) for row in rows if row.get("asset")})
+    families = sorted({str(row.get("strategy_family")) for row in rows if row.get("strategy_family")})
+    regimes = sorted({str(row.get("regime")) for row in rows if row.get("regime")})
+    horizons = sorted({int(row.get("horizon_hours")) for row in rows if row.get("horizon_hours") is not None})
+    readiness_buckets = sorted({str(row.get("readiness_bucket")) for row in rows if row.get("readiness_bucket")})
+    confidence_buckets = sorted({str(row.get("confidence_bucket")) for row in rows if row.get("confidence_bucket")})
+    weekdays = sorted({str(row.get("weekday")) for row in rows if row.get("weekday")})
+    stability_statuses = sorted({str(row.get("stability_status")) for row in rows if row.get("stability_status")})
+
+    st.markdown("#### Edge Slice Filters")
+    cols = st.columns(4)
+    asset = cols[0].selectbox("Edge Asset", ["All", *assets], key="edge_asset")
+    family = cols[1].selectbox("Edge Strategy Family", ["All", *families], key="edge_strategy_family")
+    regime = cols[2].selectbox("Edge Regime", ["All", *regimes], key="edge_regime")
+    horizon = cols[3].selectbox("Edge Horizon", ["All", *horizons], key="edge_horizon")
+
+    cols_2 = st.columns(4)
+    readiness_bucket = cols_2[0].selectbox(
+        "Edge Readiness Bucket",
+        ["All", *readiness_buckets],
+        key="edge_readiness_bucket",
+    )
+    confidence_bucket = cols_2[1].selectbox(
+        "Confidence Bucket",
+        ["All", *confidence_buckets],
+        key="edge_confidence_bucket",
+    )
+    weekday = cols_2[2].selectbox("Weekday", ["All", *weekdays], key="edge_weekday")
+    stability_status = cols_2[3].selectbox(
+        "Stability Status",
+        ["All", *stability_statuses],
+        key="edge_stability_status",
+    )
+
+    return {
+        "asset": None if asset == "All" else asset,
+        "strategy_family": None if family == "All" else family,
+        "regime": None if regime == "All" else regime,
+        "horizon_hours": None if horizon == "All" else int(horizon),
+        "readiness_bucket": None if readiness_bucket == "All" else readiness_bucket,
+        "confidence_bucket": None if confidence_bucket == "All" else confidence_bucket,
+        "weekday": None if weekday == "All" else weekday,
+        "stability_status": None if stability_status == "All" else stability_status,
+    }
+
+
+def _filter_hypothesis_edge_rows(
+    rows: list[dict[str, Any]],
+    *,
+    asset: str | None = None,
+    strategy_family: str | None = None,
+    regime: str | None = None,
+    horizon_hours: int | None = None,
+    readiness_bucket: str | None = None,
+    confidence_bucket: str | None = None,
+    weekday: str | None = None,
+    stability_status: str | None = None,
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for row in rows:
+        if asset and str(row.get("asset")) != asset:
+            continue
+        if strategy_family and str(row.get("strategy_family")) != strategy_family:
+            continue
+        if regime and str(row.get("regime")) != regime:
+            continue
+        if horizon_hours is not None and int(row.get("horizon_hours") or 0) != int(horizon_hours):
+            continue
+        if readiness_bucket and str(row.get("readiness_bucket")) != readiness_bucket:
+            continue
+        if confidence_bucket and str(row.get("confidence_bucket")) != confidence_bucket:
+            continue
+        if weekday and str(row.get("weekday")) != weekday:
+            continue
+        if stability_status and str(row.get("stability_status")) != stability_status:
+            continue
+        filtered.append(row)
+    return filtered
+
+
+def _hypothesis_edge_slice_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    formatted_rows: list[dict[str, Any]] = []
+    for row in rows:
+        warnings = row.get("warnings", [])
+        if isinstance(warnings, list):
+            warning_text = "; ".join(str(item) for item in warnings if str(item).strip())
+        else:
+            warning_text = str(warnings or "")
+        formatted_rows.append(
+            {
+                "slice_key": row.get("slice_key"),
+                "asset": row.get("asset"),
+                "strategy_family": row.get("strategy_family"),
+                "regime": row.get("regime"),
+                "horizon_hours": row.get("horizon_hours"),
+                "readiness_bucket": row.get("readiness_bucket"),
+                "confidence_bucket": row.get("confidence_bucket"),
+                "weekday": row.get("weekday"),
+                "sample_size": row.get("sample_size"),
+                "favorable_count": row.get("favorable_count"),
+                "unfavorable_count": row.get("unfavorable_count"),
+                "neutral_count": row.get("neutral_count"),
+                "favorable_rate": _format_ratio(row.get("favorable_rate")),
+                "unfavorable_rate": _format_ratio(row.get("unfavorable_rate")),
+                "neutral_rate": _format_ratio(row.get("neutral_rate")),
+                "avg_move_pct": _format_metric(row.get("avg_move_pct")),
+                "avg_max_favorable_move_pct": _format_metric(row.get("avg_max_favorable_move_pct")),
+                "avg_max_adverse_move_pct": _format_metric(row.get("avg_max_adverse_move_pct")),
+                "stability_status": row.get("stability_status"),
+                "candidate_status": row.get("candidate_status"),
+                "warnings": warning_text or None,
+            }
+        )
+    return formatted_rows
+
+
+def _hypothesis_edge_summary_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    formatted_rows: list[dict[str, Any]] = []
+    for row in rows:
+        formatted_rows.append(
+            {
+                "created_at": row.get("generated_at") or row.get("created_at"),
+                "lookback_days": row.get("lookback_days"),
+                "total_slices": row.get("total_slices"),
+                "strongest_slices": len(row.get("strongest_slices", [])) if isinstance(row.get("strongest_slices"), list) else 0,
+                "weakest_slices": len(row.get("weakest_slices", [])) if isinstance(row.get("weakest_slices"), list) else 0,
+                "unstable_slices": len(row.get("unstable_slices", [])) if isinstance(row.get("unstable_slices"), list) else 0,
+            }
+        )
+    return formatted_rows
 
 
 def _summary_export_row(summary: dict[str, Any]) -> dict[str, Any]:

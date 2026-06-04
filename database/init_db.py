@@ -331,6 +331,44 @@ CREATE TABLE IF NOT EXISTS hypothesis_review_notes (
     tags TEXT,
     is_deleted INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS hypothesis_edge_slice_summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    lookback_days INTEGER NOT NULL,
+    total_slices INTEGER NOT NULL,
+    strongest_slices_json TEXT NOT NULL,
+    weakest_slices_json TEXT NOT NULL,
+    unstable_slices_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hypothesis_edge_slice_rows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    summary_id INTEGER NOT NULL,
+    slice_key TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    strategy_family TEXT NOT NULL,
+    regime TEXT NOT NULL,
+    horizon_hours INTEGER NOT NULL,
+    readiness_bucket TEXT NOT NULL,
+    confidence_bucket TEXT NOT NULL,
+    weekday TEXT NOT NULL,
+    sample_size INTEGER NOT NULL,
+    favorable_count INTEGER NOT NULL,
+    unfavorable_count INTEGER NOT NULL,
+    neutral_count INTEGER NOT NULL,
+    favorable_rate REAL NOT NULL,
+    unfavorable_rate REAL NOT NULL,
+    neutral_rate REAL NOT NULL,
+    avg_move_pct REAL,
+    avg_max_favorable_move_pct REAL,
+    avg_max_adverse_move_pct REAL,
+    stability_status TEXT NOT NULL,
+    candidate_status TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    FOREIGN KEY (summary_id) REFERENCES hypothesis_edge_slice_summaries (id)
+);
 """
 
 

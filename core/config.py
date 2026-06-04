@@ -179,6 +179,17 @@ class HypothesisReviewConfig:
 
 
 @dataclass(frozen=True)
+class HypothesisEdgeSlicingConfig:
+    enabled: bool
+    lookback_days: int
+    min_samples_per_slice: int
+    strong_favorable_rate: float
+    weak_favorable_rate: float
+    max_unfavorable_rate: float
+    max_avg_adverse_move_pct: dict[str, float]
+
+
+@dataclass(frozen=True)
 class GoldSpotProviderConfig:
     enabled: bool
     provider: str
@@ -228,6 +239,7 @@ class AppConfig:
     strategy_hypotheses: StrategyHypothesisConfig
     hypothesis_outcomes: HypothesisOutcomeConfig
     hypothesis_review: HypothesisReviewConfig
+    hypothesis_edge_slicing: HypothesisEdgeSlicingConfig
     gold_spot_provider: GoldSpotProviderConfig
     dxy_provider: DxyProviderConfig
 
@@ -267,6 +279,7 @@ def load_config(project_root: Path) -> AppConfig:
     strategy_hypotheses_section = raw_config.get("strategy_hypotheses", {})
     hypothesis_outcomes_section = raw_config.get("hypothesis_outcomes", {})
     hypothesis_review_section = raw_config.get("hypothesis_review", {})
+    hypothesis_edge_slicing_section = raw_config.get("hypothesis_edge_slicing", {})
 
     config = AppConfig(
         project_root=project_root,
@@ -314,6 +327,7 @@ def load_config(project_root: Path) -> AppConfig:
         strategy_hypotheses=_build_strategy_hypotheses_config(strategy_hypotheses_section),
         hypothesis_outcomes=_build_hypothesis_outcomes_config(hypothesis_outcomes_section),
         hypothesis_review=_build_hypothesis_review_config(hypothesis_review_section),
+        hypothesis_edge_slicing=_build_hypothesis_edge_slicing_config(hypothesis_edge_slicing_section),
         gold_spot_provider=_build_gold_spot_provider_config(gold_spot_provider_section),
         dxy_provider=_build_dxy_provider_config(dxy_provider_section),
     )
@@ -517,6 +531,33 @@ def validate_config(config: AppConfig) -> None:
 
     if config.hypothesis_review.readiness_buckets.low_below >= config.hypothesis_review.readiness_buckets.medium_below:
         errors.append("hypothesis_review.readiness_buckets.low_below must be less than medium_below.")
+
+    if config.hypothesis_edge_slicing.lookback_days <= 0:
+        errors.append("hypothesis_edge_slicing.lookback_days must be greater than zero.")
+
+    if config.hypothesis_edge_slicing.min_samples_per_slice <= 0:
+        errors.append("hypothesis_edge_slicing.min_samples_per_slice must be greater than zero.")
+
+    for field_name, value in {
+        "hypothesis_edge_slicing.strong_favorable_rate": config.hypothesis_edge_slicing.strong_favorable_rate,
+        "hypothesis_edge_slicing.weak_favorable_rate": config.hypothesis_edge_slicing.weak_favorable_rate,
+        "hypothesis_edge_slicing.max_unfavorable_rate": config.hypothesis_edge_slicing.max_unfavorable_rate,
+    }.items():
+        if value < 0 or value > 1:
+            errors.append(f"{field_name} must be between 0 and 1.")
+
+    if config.hypothesis_edge_slicing.strong_favorable_rate < config.hypothesis_edge_slicing.weak_favorable_rate:
+        errors.append(
+            "hypothesis_edge_slicing.strong_favorable_rate must be greater than or equal to weak_favorable_rate."
+        )
+
+    for asset_key in ("BTC", "Gold"):
+        if asset_key not in config.hypothesis_edge_slicing.max_avg_adverse_move_pct:
+            errors.append(f"hypothesis_edge_slicing.max_avg_adverse_move_pct.{asset_key} is required.")
+            continue
+        threshold = config.hypothesis_edge_slicing.max_avg_adverse_move_pct[asset_key]
+        if threshold < 0:
+            errors.append(f"hypothesis_edge_slicing.max_avg_adverse_move_pct.{asset_key} must be zero or greater.")
 
     if config.gold_spot_provider.provider not in ALLOWED_GOLD_SPOT_PROVIDERS:
         errors.append(
@@ -806,6 +847,28 @@ def _build_hypothesis_review_config(raw_config: object) -> HypothesisReviewConfi
             low_below=int(buckets.get("low_below", 50)),
             medium_below=int(buckets.get("medium_below", 70)),
         ),
+    )
+
+
+def _build_hypothesis_edge_slicing_config(raw_config: object) -> HypothesisEdgeSlicingConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    raw_max_adverse = section.get("max_avg_adverse_move_pct", {})
+    max_avg_adverse = {
+        "BTC": 1.5,
+        "Gold": 0.8,
+    }
+    if isinstance(raw_max_adverse, dict):
+        for asset_key, default_value in max_avg_adverse.items():
+            max_avg_adverse[asset_key] = float(raw_max_adverse.get(asset_key, default_value))
+
+    return HypothesisEdgeSlicingConfig(
+        enabled=_as_bool(section.get("enabled", True)),
+        lookback_days=int(section.get("lookback_days", 90)),
+        min_samples_per_slice=int(section.get("min_samples_per_slice", 10)),
+        strong_favorable_rate=float(section.get("strong_favorable_rate", 0.60)),
+        weak_favorable_rate=float(section.get("weak_favorable_rate", 0.45)),
+        max_unfavorable_rate=float(section.get("max_unfavorable_rate", 0.40)),
+        max_avg_adverse_move_pct=max_avg_adverse,
     )
 
 

@@ -10,6 +10,7 @@ from agents.btc_fundamental_bot import BTCFundamentalBot
 from agents.data_quality_bot import DataQualityBot
 from agents.gold_fundamental_bot import GoldFundamentalBot
 from agents.orchestrator_bot import OrchestratorBot
+from analytics.hypothesis_edge_slicing import HypothesisEdgeSlicingAnalyzer
 from analytics.hypothesis_outcomes import HypothesisOutcomeEvaluator
 from analytics.hypothesis_review import HypothesisReviewAnalyzer
 from analytics.hypothesis_review_export import HypothesisReviewExportService
@@ -82,6 +83,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Export persisted hypothesis review CSV files to data/exports without running any workflow or simulation.",
     )
+    parser.add_argument(
+        "--hypothesis-edge-slicing",
+        action="store_true",
+        help="Build read-only hypothesis edge slicing analytics from persisted hypothesis outcomes only.",
+    )
     return parser.parse_args(argv)
 
 
@@ -152,6 +158,11 @@ def build_orchestrator(config: AppConfig, telegram_runtime: TelegramRuntimeSetti
             database_path=config.database_path,
             config=config.hypothesis_review,
             lookback_days=config.hypothesis_outcomes.max_lookback_days,
+        ),
+        hypothesis_edge_slicing_analyzer=HypothesisEdgeSlicingAnalyzer(
+            database_path=config.database_path,
+            config=config.hypothesis_edge_slicing,
+            readiness_buckets=config.hypothesis_review.readiness_buckets,
         ),
     )
 
@@ -236,6 +247,15 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             logger.exception("Hypothesis review export failed.")
             return 1
+    if args.hypothesis_edge_slicing:
+        logger.info("Building hypothesis edge slicing analytics.")
+        try:
+            initialize_database(config.database_path)
+            print(build_hypothesis_edge_slicing_report(config))
+            return 0
+        except Exception:
+            logger.exception("Hypothesis edge slicing analytics failed.")
+            return 1
 
     workflow_label = "Telegram test" if runtime_options.test_telegram else "daily brief"
     logger.info("Starting %s %s workflow in %s mode.", config.app_name, workflow_label, config.mode)
@@ -307,6 +327,14 @@ def build_paper_report(config: AppConfig) -> str:
     hypothesis_review_summary = hypothesis_review_analyzer.load_latest_summary()
     if hypothesis_review_summary is None and config.hypothesis_review.enabled:
         hypothesis_review_summary = hypothesis_review_analyzer.build_summary()
+    hypothesis_edge_slicing_analyzer = HypothesisEdgeSlicingAnalyzer(
+        database_path=config.database_path,
+        config=config.hypothesis_edge_slicing,
+        readiness_buckets=config.hypothesis_review.readiness_buckets,
+    )
+    hypothesis_edge_slice_summary = hypothesis_edge_slicing_analyzer.load_latest_summary()
+    if hypothesis_edge_slice_summary is None and config.hypothesis_edge_slicing.enabled:
+        hypothesis_edge_slice_summary = hypothesis_edge_slicing_analyzer.build_summary()
     return formatter.format(
         analytics,
         paper_signal_summary=asdict(config.paper_signal),
@@ -314,6 +342,7 @@ def build_paper_report(config: AppConfig) -> str:
         strategy_hypotheses=strategy_hypotheses,
         hypothesis_outcomes=hypothesis_outcomes,
         hypothesis_review_summary=hypothesis_review_summary,
+        hypothesis_edge_slice_summary=hypothesis_edge_slice_summary,
     )
 
 
@@ -392,6 +421,14 @@ def build_hypothesis_review_report(config: AppConfig) -> str:
     repository = WorkflowRepository(config.database_path)
     if config.hypothesis_review.enabled:
         repository.store_hypothesis_review_summary(summary)
+    edge_analyzer = HypothesisEdgeSlicingAnalyzer(
+        database_path=config.database_path,
+        config=config.hypothesis_edge_slicing,
+        readiness_buckets=config.hypothesis_review.readiness_buckets,
+    )
+    edge_summary = edge_analyzer.build_summary()
+    if config.hypothesis_edge_slicing.enabled:
+        repository.store_hypothesis_edge_slice_summary(edge_summary)
 
     lines = [
         "HYPOTHESIS REVIEW ANALYTICS",
@@ -437,7 +474,68 @@ def build_hypothesis_review_report(config: AppConfig) -> str:
             lines.append(
                 f"- {candidate['strategy_family']} | Asset {candidate['asset']} | {candidate['reason']}"
             )
+    lines.extend(["", *build_hypothesis_edge_slicing_lines(edge_summary)])
     return "\n".join(lines)
+
+
+def build_hypothesis_edge_slicing_report(config: AppConfig) -> str:
+    analyzer = HypothesisEdgeSlicingAnalyzer(
+        database_path=config.database_path,
+        config=config.hypothesis_edge_slicing,
+        readiness_buckets=config.hypothesis_review.readiness_buckets,
+    )
+    summary = analyzer.build_summary()
+    repository = WorkflowRepository(config.database_path)
+    if config.hypothesis_edge_slicing.enabled:
+        repository.store_hypothesis_edge_slice_summary(summary)
+    return "\n".join(build_hypothesis_edge_slicing_lines(summary))
+
+
+def build_hypothesis_edge_slicing_lines(summary) -> list[str]:
+    lines = [
+        "HYPOTHESIS EDGE SLICING",
+        "REVIEW ONLY",
+        "NO TRADING",
+        "",
+        f"Lookback Days: {summary.lookback_days}",
+        f"Total Slices: {summary.total_slices}",
+        f"Strongest Slices: {len(summary.strongest_slices)}",
+        f"Weakest Slices: {len(summary.weakest_slices)}",
+        f"Unstable Slices: {len(summary.unstable_slices)}",
+    ]
+    if summary.strongest_slices:
+        lines.extend(["", "Strongest Slices:"])
+        for row in summary.strongest_slices[:5]:
+            lines.append(
+                f"- {row.asset} | {row.strategy_family} | {row.regime} | {row.horizon_hours}h | "
+                f"{row.readiness_bucket}/{row.confidence_bucket} | {row.stability_status} | "
+                f"fav={row.favorable_rate:.0%} | n={row.sample_size}"
+            )
+    if summary.weakest_slices:
+        lines.extend(["", "Weakest Slices:"])
+        for row in summary.weakest_slices[:5]:
+            lines.append(
+                f"- {row.asset} | {row.strategy_family} | {row.regime} | {row.horizon_hours}h | "
+                f"{row.stability_status} | unfav={row.unfavorable_rate:.0%} | "
+                f"adverse={_format_optional_pct(row.avg_max_adverse_move_pct)} | n={row.sample_size}"
+            )
+    if summary.unstable_slices:
+        lines.extend(["", "Unstable / Sample-Limited Slices:"])
+        for row in summary.unstable_slices[:5]:
+            lines.append(
+                f"- {row.asset} | {row.strategy_family} | {row.regime} | {row.horizon_hours}h | "
+                f"{row.stability_status} | n={row.sample_size}"
+            )
+    lines.extend(
+        [
+            "",
+            "Warnings:",
+            "- REVIEW ONLY. No automatic promotion or trading occurs from edge slicing analytics.",
+        ]
+    )
+    if summary.warnings:
+        lines.extend(f"- {warning}" for warning in summary.warnings[:10])
+    return lines
 
 
 def _format_optional_pct(value: object) -> str:

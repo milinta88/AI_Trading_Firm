@@ -34,6 +34,7 @@ class OrchestratorBot:
         strategy_hypothesis_engine,
         hypothesis_outcome_evaluator,
         hypothesis_review_analyzer,
+        hypothesis_edge_slicing_analyzer,
     ) -> None:
         self.config = config
         self.repository = repository
@@ -49,6 +50,7 @@ class OrchestratorBot:
         self.strategy_hypothesis_engine = strategy_hypothesis_engine
         self.hypothesis_outcome_evaluator = hypothesis_outcome_evaluator
         self.hypothesis_review_analyzer = hypothesis_review_analyzer
+        self.hypothesis_edge_slicing_analyzer = hypothesis_edge_slicing_analyzer
 
     def run_daily_brief(self) -> WorkflowOutcome:
         run_date = datetime.now(ZoneInfo(self.config.timezone)).date()
@@ -97,6 +99,9 @@ class OrchestratorBot:
             hypothesis_review_summary = self.hypothesis_review_analyzer.build_summary()
             if self.config.hypothesis_review.enabled:
                 self.repository.store_hypothesis_review_summary(hypothesis_review_summary)
+            hypothesis_edge_slice_summary = self.hypothesis_edge_slicing_analyzer.build_summary()
+            if self.config.hypothesis_edge_slicing.enabled:
+                self.repository.store_hypothesis_edge_slice_summary(hypothesis_edge_slice_summary)
 
             report_context = DailyBriefContext(
                 run_date=run_date,
@@ -113,6 +118,7 @@ class OrchestratorBot:
                 strategy_hypotheses=strategy_hypotheses,
                 hypothesis_outcomes=latest_hypothesis_outcomes,
                 hypothesis_review_summary=hypothesis_review_summary,
+                hypothesis_edge_slice_summary=hypothesis_edge_slice_summary,
             )
             report_text = self.report_formatter.format(report_context)
 

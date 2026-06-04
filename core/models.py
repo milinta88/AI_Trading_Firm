@@ -136,6 +136,43 @@ class HypothesisReviewSummary:
 
 
 @dataclass(frozen=True)
+class HypothesisEdgeSliceRow:
+    slice_key: str
+    asset: str
+    strategy_family: str
+    regime: str
+    horizon_hours: int
+    readiness_bucket: str
+    confidence_bucket: str
+    weekday: str
+    sample_size: int
+    favorable_count: int
+    unfavorable_count: int
+    neutral_count: int
+    favorable_rate: float
+    unfavorable_rate: float
+    neutral_rate: float
+    avg_move_pct: float | None
+    avg_max_favorable_move_pct: float | None
+    avg_max_adverse_move_pct: float | None
+    stability_status: str
+    candidate_status: str
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class HypothesisEdgeSliceSummary:
+    total_slices: int
+    generated_at: datetime
+    lookback_days: int
+    slice_rows: list[HypothesisEdgeSliceRow]
+    warnings: list[str]
+    strongest_slices: list[HypothesisEdgeSliceRow]
+    weakest_slices: list[HypothesisEdgeSliceRow]
+    unstable_slices: list[HypothesisEdgeSliceRow]
+
+
+@dataclass(frozen=True)
 class DailyBriefContext:
     run_date: date
     mode: str
@@ -151,6 +188,7 @@ class DailyBriefContext:
     strategy_hypotheses: dict[str, StrategyHypothesis] = field(default_factory=dict)
     hypothesis_outcomes: list[HypothesisOutcome] = field(default_factory=list)
     hypothesis_review_summary: HypothesisReviewSummary | None = None
+    hypothesis_edge_slice_summary: HypothesisEdgeSliceSummary | None = None
 
 
 @dataclass(frozen=True)

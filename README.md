@@ -197,6 +197,16 @@ See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) f
 - Updates `python main.py --hypothesis-review` and `python main.py --paper-report` with concise candidate-progress context
 - Does not create orders, paper trades, broker requests, MT5 requests, private exchange API calls, or automatic execution
 
+## Phase 2.9 Hypothesis Edge Slicing And Stability Review
+
+- Adds deterministic read-only `hypothesis_edge_slicing` analytics over persisted hypothesis outcomes only
+- Slices review results by asset, strategy family, regime, horizon, readiness bucket, confidence bucket, and weekday
+- Classifies slice stability as `INSUFFICIENT_SAMPLE`, `STRONG_POSITIVE`, `WEAK_POSITIVE`, `NEUTRAL`, `NEGATIVE`, `HIGH_ADVERSE_MOVE`, or `MIXED_OR_UNSTABLE`
+- Persists `hypothesis_edge_slice_summaries` plus optional `hypothesis_edge_slice_rows` for dashboard/report history
+- Adds `python main.py --hypothesis-edge-slicing` for local edge-slicing review without running trading, paper execution, or live data collection
+- Daily brief, `python main.py --paper-report`, `python main.py --hypothesis-review`, and the dashboard now include concise edge-slicing review context
+- Does not create orders, paper trades, broker requests, MT5 requests, private exchange API calls, or automatic execution
+
 ## Windows Setup
 
 1. Open PowerShell in the project folder:
@@ -332,6 +342,12 @@ Read-only hypothesis review export:
 python main.py --hypothesis-review-export
 ```
 
+Read-only hypothesis edge slicing:
+
+```powershell
+python main.py --hypothesis-edge-slicing
+```
+
 Read-only dashboard:
 
 ```powershell
@@ -362,10 +378,11 @@ python main.py --dry-run
 - `python main.py --hypothesis-outcomes` evaluates matured persisted strategy hypotheses against later persisted market snapshots only and does not run trading or paper execution.
 - `python main.py --hypothesis-review` summarizes persisted hypothesis outcomes into read-only review analytics and does not run trading or paper execution.
 - `python main.py --hypothesis-review-export` writes local hypothesis-review CSV files into `data/exports` and does not run trading, paper execution, or workflow delivery.
+- `python main.py --hypothesis-edge-slicing` summarizes persisted hypothesis outcomes into read-only slice and stability analytics and does not run trading, paper execution, or workflow delivery.
 
 ## Read-Only Market Data
 
-Phase 1.2 through Phase 1.9 use read-only endpoints and persisted snapshots only.
+Phase 1.2 through Phase 2.9 use read-only endpoints and persisted snapshots only.
 
 - BTC price uses a public Binance ticker endpoint.
 - Fear & Greed uses the public Alternative.me API.
@@ -396,6 +413,7 @@ Phase 2.0 adds a Paper Trading tab for simulated-only local orders, open positio
 Phase 2.2 adds profile-aware paper signal tuning, normalized signal-review tables, no-trade reason charts, and profile/status filters for recent review rows.
 Phase 2.3 adds local paper-review CSV downloads plus a lightweight journal form and recent-notes table for simulated-only review notes.
 Phase 2.8 adds hypothesis-review drilldowns, candidate-progress tables, review tags/notes, filtered outcome CSV downloads, and local hypothesis-review export support.
+Phase 2.9 adds edge-slicing drilldowns for asset/family/regime/horizon/readiness/confidence/weekday, strongest-vs-weakest slice visibility, and slice-row CSV downloads for review-only stability analysis.
 Phase 2.4 adds a Research Readiness tab with BTC/Gold readiness cards, regime summaries, missing/stale source review, and persisted readiness history.
 Phase 2.6 adds read-only Strategy Hypothesis Outcome summaries, latest outcome tables, and favorable/unfavorable rate views built only from persisted hypotheses and persisted market snapshots.
 Phase 2.7 adds read-only Strategy Hypothesis Review analytics with candidate flags, readiness-bucket summaries, regime/family breakdowns, and persisted review-summary history.

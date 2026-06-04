@@ -13,11 +13,13 @@ import yaml
 
 from analytics.research_readiness import ResearchReadinessAnalyzer
 from analytics.data_hygiene import DataHygieneAnalyzer
+from analytics.hypothesis_edge_slicing import HypothesisEdgeSlicingAnalyzer
 from analytics.hypothesis_review import HypothesisReviewAnalyzer
 from analytics.report_archive import ArchiveQuery, ReportArchive
 from analytics.trend_analyzer import TrendAnalyzer
 from core.config import (
     DEFAULT_RESEARCH_STALE_AFTER_MINUTES,
+    HypothesisEdgeSlicingConfig,
     HypothesisReviewBucketsConfig,
     HypothesisReviewConfig,
     PAPER_SIGNAL_PROFILE_PRESETS,
@@ -109,6 +111,10 @@ class DashboardData:
     hypothesis_review_enabled: bool = False
     hypothesis_review_config: HypothesisReviewConfig = field(default_factory=lambda: _default_hypothesis_review_config())
     hypothesis_review_lookback_days: int = 14
+    hypothesis_edge_slicing_enabled: bool = False
+    hypothesis_edge_slicing_config: HypothesisEdgeSlicingConfig = field(
+        default_factory=lambda: _default_hypothesis_edge_slicing_config()
+    )
     latest_workflow_run: dict[str, Any] | None = None
     latest_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
     recent_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
@@ -159,6 +165,9 @@ class DashboardData:
     latest_hypothesis_review_summary: dict[str, Any] | None = None
     recent_hypothesis_review_summaries: list[dict[str, Any]] = field(default_factory=list)
     hypothesis_review_notes: list[dict[str, Any]] = field(default_factory=list)
+    latest_hypothesis_edge_slice_summary: dict[str, Any] | None = None
+    recent_hypothesis_edge_slice_summaries: list[dict[str, Any]] = field(default_factory=list)
+    hypothesis_edge_slice_rows: list[dict[str, Any]] = field(default_factory=list)
     paper_signal_config: dict[str, Any] | None = field(
         default_factory=lambda: _default_paper_signal_config("conservative")
     )
@@ -178,6 +187,7 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
         hypothesis_outcome_horizons,
         hypothesis_outcome_max_lookback_days,
         hypothesis_review_config,
+        hypothesis_edge_slicing_config,
         database_path,
     ) = load_dashboard_config(project_root)
 
@@ -195,6 +205,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             hypothesis_review_enabled=hypothesis_review_config.enabled,
             hypothesis_review_config=hypothesis_review_config,
             hypothesis_review_lookback_days=hypothesis_outcome_max_lookback_days,
+            hypothesis_edge_slicing_enabled=hypothesis_edge_slicing_config.enabled,
+            hypothesis_edge_slicing_config=hypothesis_edge_slicing_config,
             paper_signal_config=paper_signal_config,
             message=f"Database not found at {database_path}. Run python main.py --dry-run first.",
         )
@@ -229,6 +241,12 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 lookback_days=hypothesis_outcome_max_lookback_days,
                 limit=limit,
             )
+            hypothesis_edge_slicing = _load_hypothesis_edge_slicing(
+                database_path=database_path,
+                config=hypothesis_edge_slicing_config,
+                readiness_buckets=hypothesis_review_config.readiness_buckets,
+                limit=limit,
+            )
             return DashboardData(
                 database_available=True,
                 database_message=f"Connected read-only to {database_path}.",
@@ -245,6 +263,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 hypothesis_review_enabled=hypothesis_review_config.enabled,
                 hypothesis_review_config=hypothesis_review_config,
                 hypothesis_review_lookback_days=hypothesis_outcome_max_lookback_days,
+                hypothesis_edge_slicing_enabled=hypothesis_edge_slicing_config.enabled,
+                hypothesis_edge_slicing_config=hypothesis_edge_slicing_config,
                 paper_signal_config=paper_signal_config,
                 latest_workflow_run=_fetch_latest_workflow_run(connection),
                 latest_market_snapshots=latest_market_snapshots,
@@ -294,6 +314,9 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 latest_hypothesis_review_summary=hypothesis_review["latest_summary"],
                 recent_hypothesis_review_summaries=hypothesis_review["recent_summaries"],
                 hypothesis_review_notes=_fetch_recent_hypothesis_review_notes(connection, limit),
+                latest_hypothesis_edge_slice_summary=hypothesis_edge_slicing["latest_summary"],
+                recent_hypothesis_edge_slice_summaries=hypothesis_edge_slicing["recent_summaries"],
+                hypothesis_edge_slice_rows=hypothesis_edge_slicing["slice_rows"],
             )
     except sqlite3.Error as exc:
         return _empty_dashboard_data(
@@ -309,6 +332,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             hypothesis_review_enabled=hypothesis_review_config.enabled,
             hypothesis_review_config=hypothesis_review_config,
             hypothesis_review_lookback_days=hypothesis_outcome_max_lookback_days,
+            hypothesis_edge_slicing_enabled=hypothesis_edge_slicing_config.enabled,
+            hypothesis_edge_slicing_config=hypothesis_edge_slicing_config,
             paper_signal_config=paper_signal_config,
             message=f"Unable to read dashboard database: {exc}",
         )
@@ -316,7 +341,21 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
 
 def load_dashboard_config(
     project_root: Path,
-) -> tuple[str, bool, bool, float, dict[str, Any], ResearchReadinessConfig, bool, bool, list[int], int, HypothesisReviewConfig, Path]:
+) -> tuple[
+    str,
+    bool,
+    bool,
+    float,
+    dict[str, Any],
+    ResearchReadinessConfig,
+    bool,
+    bool,
+    list[int],
+    int,
+    HypothesisReviewConfig,
+    HypothesisEdgeSlicingConfig,
+    Path,
+]:
     config_path = project_root / "config.yaml"
     if not config_path.exists():
         return (
@@ -331,6 +370,7 @@ def load_dashboard_config(
             [4, 24, 72],
             14,
             _default_hypothesis_review_config(),
+            _default_hypothesis_edge_slicing_config(),
             project_root / "data" / "database.db",
         )
 
@@ -350,6 +390,7 @@ def load_dashboard_config(
             [4, 24, 72],
             14,
             _default_hypothesis_review_config(),
+            _default_hypothesis_edge_slicing_config(),
             project_root / "data" / "database.db",
         )
 
@@ -361,6 +402,7 @@ def load_dashboard_config(
     strategy_hypotheses_section = raw_config.get("strategy_hypotheses", {})
     hypothesis_outcomes_section = raw_config.get("hypothesis_outcomes", {})
     hypothesis_review_section = raw_config.get("hypothesis_review", {})
+    hypothesis_edge_slicing_section = raw_config.get("hypothesis_edge_slicing", {})
     database_section = raw_config.get("database", {})
     database_path = Path(str(database_section.get("path", "data/database.db")))
     if not database_path.is_absolute():
@@ -379,6 +421,7 @@ def load_dashboard_config(
             _load_hypothesis_outcome_horizons(hypothesis_outcomes_section),
             int(hypothesis_outcomes_section.get("max_lookback_days", 14)),
             _load_hypothesis_review_config(hypothesis_review_section),
+            _load_hypothesis_edge_slicing_config(hypothesis_edge_slicing_section),
             database_path,
         )
     except Exception:
@@ -394,6 +437,7 @@ def load_dashboard_config(
             [4, 24, 72],
             14,
             _default_hypothesis_review_config(),
+            _default_hypothesis_edge_slicing_config(),
             database_path,
         )
 
@@ -540,6 +584,8 @@ def _empty_dashboard_data(
     hypothesis_review_enabled: bool,
     hypothesis_review_config: HypothesisReviewConfig,
     hypothesis_review_lookback_days: int,
+    hypothesis_edge_slicing_enabled: bool,
+    hypothesis_edge_slicing_config: HypothesisEdgeSlicingConfig,
     paper_signal_config: dict[str, Any],
     message: str,
 ) -> DashboardData:
@@ -560,6 +606,8 @@ def _empty_dashboard_data(
         hypothesis_review_enabled=hypothesis_review_enabled,
         hypothesis_review_config=hypothesis_review_config,
         hypothesis_review_lookback_days=hypothesis_review_lookback_days,
+        hypothesis_edge_slicing_enabled=hypothesis_edge_slicing_enabled,
+        hypothesis_edge_slicing_config=hypothesis_edge_slicing_config,
         paper_signal_config=paper_signal_config,
         paper_analytics_summary=_default_paper_analytics_summary(paper_trading_starting_equity),
         paper_signal_review_summary=_default_paper_signal_review_summary(
@@ -633,6 +681,27 @@ def _load_hypothesis_review(
     review_rows = analyzer.list_outcome_rows(limit=max(limit * 4, 200))
     return {
         "outcomes": review_rows,
+        "latest_summary": asdict(latest_summary) if latest_summary else None,
+        "recent_summaries": [asdict(summary) for summary in recent_summaries],
+    }
+
+
+def _load_hypothesis_edge_slicing(
+    *,
+    database_path: Path,
+    config: HypothesisEdgeSlicingConfig,
+    readiness_buckets: HypothesisReviewBucketsConfig,
+    limit: int,
+) -> dict[str, Any]:
+    analyzer = HypothesisEdgeSlicingAnalyzer(
+        database_path=database_path,
+        config=config,
+        readiness_buckets=readiness_buckets,
+    )
+    latest_summary = analyzer.load_latest_summary() or analyzer.build_summary()
+    recent_summaries = analyzer.load_recent_summaries(limit=limit)
+    return {
+        "slice_rows": [asdict(row) for row in latest_summary.slice_rows] if latest_summary else [],
         "latest_summary": asdict(latest_summary) if latest_summary else None,
         "recent_summaries": [asdict(summary) for summary in recent_summaries],
     }
@@ -717,6 +786,18 @@ def _default_hypothesis_review_config() -> HypothesisReviewConfig:
     )
 
 
+def _default_hypothesis_edge_slicing_config() -> HypothesisEdgeSlicingConfig:
+    return HypothesisEdgeSlicingConfig(
+        enabled=False,
+        lookback_days=90,
+        min_samples_per_slice=10,
+        strong_favorable_rate=0.60,
+        weak_favorable_rate=0.45,
+        max_unfavorable_rate=0.40,
+        max_avg_adverse_move_pct={"BTC": 1.5, "Gold": 0.8},
+    )
+
+
 def _load_hypothesis_outcome_horizons(raw_config: object) -> list[int]:
     section = raw_config if isinstance(raw_config, dict) else {}
     raw_horizons = section.get("horizons_hours", [4, 24, 72])
@@ -746,6 +827,25 @@ def _load_hypothesis_review_config(raw_config: object) -> HypothesisReviewConfig
             low_below=int(bucket_values.get("low_below", 50)),
             medium_below=int(bucket_values.get("medium_below", 70)),
         ),
+    )
+
+
+def _load_hypothesis_edge_slicing_config(raw_config: object) -> HypothesisEdgeSlicingConfig:
+    section = raw_config if isinstance(raw_config, dict) else {}
+    raw_thresholds = section.get("max_avg_adverse_move_pct", {})
+    thresholds = {"BTC": 1.5, "Gold": 0.8}
+    if isinstance(raw_thresholds, dict):
+        for asset_key, default_value in thresholds.items():
+            thresholds[asset_key] = float(raw_thresholds.get(asset_key, default_value))
+
+    return HypothesisEdgeSlicingConfig(
+        enabled=_as_bool(section.get("enabled", False)),
+        lookback_days=int(section.get("lookback_days", 90)),
+        min_samples_per_slice=int(section.get("min_samples_per_slice", 10)),
+        strong_favorable_rate=float(section.get("strong_favorable_rate", 0.60)),
+        weak_favorable_rate=float(section.get("weak_favorable_rate", 0.45)),
+        max_unfavorable_rate=float(section.get("max_unfavorable_rate", 0.40)),
+        max_avg_adverse_move_pct=thresholds,
     )
 
 

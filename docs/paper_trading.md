@@ -260,3 +260,13 @@ Phase 2.8 adds practical review tooling around the persisted hypothesis review l
 - Candidate-progress rows show whether a family is a `REVIEW_CANDIDATE`, still needs more samples, fails rate thresholds, fails adverse-move thresholds, or remains blocked.
 - Local `hypothesis_review_notes` store optional review tags and notes only; they do not create paper orders or change paper-trading thresholds.
 - All tooling remains review-only, local-only, and free of broker, MT5, private exchange API, or real execution behavior.
+
+## Phase 2.9 Hypothesis Edge Slicing And Stability Review
+
+Phase 2.9 adds deeper slice analytics over persisted hypothesis outcomes for review-only stability analysis.
+
+- `python main.py --hypothesis-edge-slicing` builds local slice analytics from persisted hypothesis outcomes only.
+- Slice dimensions include asset, strategy family, regime, horizon, readiness bucket, confidence bucket, and weekday.
+- Stability labels include `INSUFFICIENT_SAMPLE`, `STRONG_POSITIVE`, `WEAK_POSITIVE`, `NEUTRAL`, `NEGATIVE`, `HIGH_ADVERSE_MOVE`, and `MIXED_OR_UNSTABLE`.
+- Dashboard drilldowns show strongest slices, weakest slices, unstable slices, filtered slice tables, and slice-row CSV downloads.
+- Edge slices remain review heuristics only; they do not promote paper trading, create paper orders, or authorize execution.
