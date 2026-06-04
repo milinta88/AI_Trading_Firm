@@ -187,6 +187,16 @@ See [PLAN.md](</C:/Users/saroj/Documents/New project/AI_Trading_Firm/PLAN.md>) f
 - Daily brief, `python main.py --paper-report`, and the dashboard now include concise hypothesis-review summary sections
 - Does not create orders, paper trades, broker requests, MT5 requests, private exchange API calls, or automatic execution
 
+## Phase 2.8 Hypothesis Review Drilldown, Tags, And Export
+
+- Adds read-only CSV export tooling for `strategy_hypotheses`, `strategy_hypothesis_outcomes`, and `hypothesis_review_summaries`
+- Adds `python main.py --hypothesis-review-export` to write local review CSV files into `data/exports`
+- Adds local `hypothesis_review_notes` metadata with tags, filters, and recent-note visibility in the dashboard
+- Adds dashboard drilldown filters for asset, strategy family, regime, horizon, outcome status, readiness bucket, and hypothesis status
+- Adds candidate-progress visibility with `REVIEW_CANDIDATE`, `NEED_MORE_SAMPLES`, `FAIL_RATE_THRESHOLD`, `FAIL_ADVERSE_MOVE`, or `BLOCKED`
+- Updates `python main.py --hypothesis-review` and `python main.py --paper-report` with concise candidate-progress context
+- Does not create orders, paper trades, broker requests, MT5 requests, private exchange API calls, or automatic execution
+
 ## Windows Setup
 
 1. Open PowerShell in the project folder:
@@ -316,6 +326,12 @@ Read-only hypothesis review analytics:
 python main.py --hypothesis-review
 ```
 
+Read-only hypothesis review export:
+
+```powershell
+python main.py --hypothesis-review-export
+```
+
 Read-only dashboard:
 
 ```powershell
@@ -345,6 +361,7 @@ python main.py --dry-run
 - `python main.py --paper-export` writes local paper review CSV files into `data/exports` and does not run the workflow or simulation.
 - `python main.py --hypothesis-outcomes` evaluates matured persisted strategy hypotheses against later persisted market snapshots only and does not run trading or paper execution.
 - `python main.py --hypothesis-review` summarizes persisted hypothesis outcomes into read-only review analytics and does not run trading or paper execution.
+- `python main.py --hypothesis-review-export` writes local hypothesis-review CSV files into `data/exports` and does not run trading, paper execution, or workflow delivery.
 
 ## Read-Only Market Data
 
@@ -378,6 +395,7 @@ Dashboard Phase 1.8 features include native Streamlit charts, date/asset/data-ty
 Phase 2.0 adds a Paper Trading tab for simulated-only local orders, open positions, risk events, and paper equity curve. Phase 2.1 expands that tab with paper performance metrics, signal review summaries, rejection charts, closed-position review, and persisted paper run summaries.
 Phase 2.2 adds profile-aware paper signal tuning, normalized signal-review tables, no-trade reason charts, and profile/status filters for recent review rows.
 Phase 2.3 adds local paper-review CSV downloads plus a lightweight journal form and recent-notes table for simulated-only review notes.
+Phase 2.8 adds hypothesis-review drilldowns, candidate-progress tables, review tags/notes, filtered outcome CSV downloads, and local hypothesis-review export support.
 Phase 2.4 adds a Research Readiness tab with BTC/Gold readiness cards, regime summaries, missing/stale source review, and persisted readiness history.
 Phase 2.6 adds read-only Strategy Hypothesis Outcome summaries, latest outcome tables, and favorable/unfavorable rate views built only from persisted hypotheses and persisted market snapshots.
 Phase 2.7 adds read-only Strategy Hypothesis Review analytics with candidate flags, readiness-bucket summaries, regime/family breakdowns, and persisted review-summary history.

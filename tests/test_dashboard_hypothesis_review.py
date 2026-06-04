@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 
+import dashboard.app as dashboard_app
 from dashboard.data_loader import load_dashboard_data
 from database.init_db import initialize_database
 
@@ -22,6 +24,8 @@ def test_dashboard_loader_handles_missing_hypothesis_review_summary_table(tmp_pa
     assert data.hypothesis_review_enabled is True
     assert data.latest_hypothesis_review_summary is not None
     assert data.latest_hypothesis_review_summary["total_outcomes"] == 0
+    assert data.hypothesis_review_outcomes == []
+    assert data.hypothesis_review_notes == []
 
 
 def test_dashboard_loader_reads_latest_hypothesis_review_summary(tmp_path: Path) -> None:
@@ -38,9 +42,9 @@ def test_dashboard_loader_reads_latest_hypothesis_review_summary(tmp_path: Path)
                 favorable_rate, unfavorable_rate, neutral_rate, by_asset_json, by_strategy_family_json,
                 by_regime_json, by_horizon_json, by_readiness_bucket_json, by_hypothesis_status_json,
                 avg_move_pct, avg_max_favorable_move_pct, avg_max_adverse_move_pct,
-                promoted_candidates_json, blocked_candidates_json, warnings_json
+                promoted_candidates_json, blocked_candidates_json, candidate_progress_json, warnings_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "2026-06-02T00:00:00+00:00",
@@ -66,6 +70,7 @@ def test_dashboard_loader_reads_latest_hypothesis_review_summary(tmp_path: Path)
                 0.4,
                 json.dumps([{"strategy_family": "BTC_TREND_CONTINUATION", "asset": "BTC"}]),
                 json.dumps([]),
+                json.dumps([{"strategy_family": "BTC_TREND_CONTINUATION", "candidate_status": "REVIEW_CANDIDATE"}]),
                 json.dumps([]),
             ),
         )
@@ -75,6 +80,46 @@ def test_dashboard_loader_reads_latest_hypothesis_review_summary(tmp_path: Path)
     assert data.latest_hypothesis_review_summary is not None
     assert data.latest_hypothesis_review_summary["evaluated_outcomes"] == 10
     assert data.latest_hypothesis_review_summary["promoted_candidates"][0]["strategy_family"] == "BTC_TREND_CONTINUATION"
+    assert data.latest_hypothesis_review_summary["candidate_progress"][0]["candidate_status"] == "REVIEW_CANDIDATE"
+
+
+def test_dashboard_review_filters_handle_empty_rows() -> None:
+    assert dashboard_app._filter_hypothesis_review_rows([], asset="BTC", outcome_status="FAVORABLE") == []
+
+
+def test_dashboard_review_filters_can_drill_down_by_family_and_status() -> None:
+    rows = [
+        {
+            "asset": "BTC",
+            "strategy_family": "BTC_TREND_CONTINUATION",
+            "regime": "TREND_UP",
+            "readiness_bucket": "HIGH",
+            "hypothesis_status": "ACTIVE",
+            "horizon_hours": 24,
+            "outcome_status": "FAVORABLE",
+            "created_at": datetime(2026, 6, 2, tzinfo=UTC).isoformat(),
+        },
+        {
+            "asset": "Gold",
+            "strategy_family": "GOLD_NO_TRADE",
+            "regime": "MIXED",
+            "readiness_bucket": "MEDIUM",
+            "hypothesis_status": "WATCH",
+            "horizon_hours": 24,
+            "outcome_status": "NEUTRAL",
+            "created_at": datetime(2026, 6, 2, tzinfo=UTC).isoformat(),
+        },
+    ]
+
+    filtered = dashboard_app._filter_hypothesis_review_rows(
+        rows,
+        asset="BTC",
+        strategy_family="BTC_TREND_CONTINUATION",
+        outcome_status="FAVORABLE",
+    )
+
+    assert len(filtered) == 1
+    assert filtered[0]["asset"] == "BTC"
 
 
 def _write_config(tmp_path: Path) -> None:

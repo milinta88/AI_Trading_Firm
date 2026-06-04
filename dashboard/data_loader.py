@@ -107,6 +107,8 @@ class DashboardData:
     hypothesis_outcomes_enabled: bool = False
     hypothesis_outcome_horizons: list[int] = field(default_factory=list)
     hypothesis_review_enabled: bool = False
+    hypothesis_review_config: HypothesisReviewConfig = field(default_factory=lambda: _default_hypothesis_review_config())
+    hypothesis_review_lookback_days: int = 14
     latest_workflow_run: dict[str, Any] | None = None
     latest_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
     recent_market_snapshots: list[dict[str, Any]] = field(default_factory=list)
@@ -153,8 +155,10 @@ class DashboardData:
     latest_hypothesis_outcomes: list[dict[str, Any]] = field(default_factory=list)
     recent_hypothesis_outcomes: list[dict[str, Any]] = field(default_factory=list)
     hypothesis_outcome_summary: dict[str, Any] = field(default_factory=_default_hypothesis_outcome_summary)
+    hypothesis_review_outcomes: list[dict[str, Any]] = field(default_factory=list)
     latest_hypothesis_review_summary: dict[str, Any] | None = None
     recent_hypothesis_review_summaries: list[dict[str, Any]] = field(default_factory=list)
+    hypothesis_review_notes: list[dict[str, Any]] = field(default_factory=list)
     paper_signal_config: dict[str, Any] | None = field(
         default_factory=lambda: _default_paper_signal_config("conservative")
     )
@@ -189,6 +193,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
             hypothesis_outcome_horizons=hypothesis_outcome_horizons,
             hypothesis_review_enabled=hypothesis_review_config.enabled,
+            hypothesis_review_config=hypothesis_review_config,
+            hypothesis_review_lookback_days=hypothesis_outcome_max_lookback_days,
             paper_signal_config=paper_signal_config,
             message=f"Database not found at {database_path}. Run python main.py --dry-run first.",
         )
@@ -237,6 +243,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
                 hypothesis_outcome_horizons=hypothesis_outcome_horizons,
                 hypothesis_review_enabled=hypothesis_review_config.enabled,
+                hypothesis_review_config=hypothesis_review_config,
+                hypothesis_review_lookback_days=hypothesis_outcome_max_lookback_days,
                 paper_signal_config=paper_signal_config,
                 latest_workflow_run=_fetch_latest_workflow_run(connection),
                 latest_market_snapshots=latest_market_snapshots,
@@ -282,8 +290,10 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
                 latest_hypothesis_outcomes=latest_hypothesis_outcomes,
                 recent_hypothesis_outcomes=recent_hypothesis_outcomes,
                 hypothesis_outcome_summary=hypothesis_outcome_summary,
+                hypothesis_review_outcomes=hypothesis_review["outcomes"],
                 latest_hypothesis_review_summary=hypothesis_review["latest_summary"],
                 recent_hypothesis_review_summaries=hypothesis_review["recent_summaries"],
+                hypothesis_review_notes=_fetch_recent_hypothesis_review_notes(connection, limit),
             )
     except sqlite3.Error as exc:
         return _empty_dashboard_data(
@@ -297,6 +307,8 @@ def load_dashboard_data(project_root: Path, limit: int = 25) -> DashboardData:
             hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
             hypothesis_outcome_horizons=hypothesis_outcome_horizons,
             hypothesis_review_enabled=hypothesis_review_config.enabled,
+            hypothesis_review_config=hypothesis_review_config,
+            hypothesis_review_lookback_days=hypothesis_outcome_max_lookback_days,
             paper_signal_config=paper_signal_config,
             message=f"Unable to read dashboard database: {exc}",
         )
@@ -497,15 +509,15 @@ def filter_rows(
     return filtered_rows
 
 
-def rows_to_csv(rows: list[dict[str, Any]]) -> str:
-    if not rows:
+def rows_to_csv(rows: list[dict[str, Any]], headers: list[str] | None = None) -> str:
+    fieldnames: list[str] = list(headers or [])
+    if not fieldnames:
+        for row in rows:
+            for key in row.keys():
+                if key not in fieldnames:
+                    fieldnames.append(key)
+    if not fieldnames:
         return ""
-
-    fieldnames: list[str] = []
-    for row in rows:
-        for key in row.keys():
-            if key not in fieldnames:
-                fieldnames.append(key)
 
     output = StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
@@ -526,6 +538,8 @@ def _empty_dashboard_data(
     hypothesis_outcomes_enabled: bool,
     hypothesis_outcome_horizons: list[int],
     hypothesis_review_enabled: bool,
+    hypothesis_review_config: HypothesisReviewConfig,
+    hypothesis_review_lookback_days: int,
     paper_signal_config: dict[str, Any],
     message: str,
 ) -> DashboardData:
@@ -544,6 +558,8 @@ def _empty_dashboard_data(
         hypothesis_outcomes_enabled=hypothesis_outcomes_enabled,
         hypothesis_outcome_horizons=list(hypothesis_outcome_horizons),
         hypothesis_review_enabled=hypothesis_review_enabled,
+        hypothesis_review_config=hypothesis_review_config,
+        hypothesis_review_lookback_days=hypothesis_review_lookback_days,
         paper_signal_config=paper_signal_config,
         paper_analytics_summary=_default_paper_analytics_summary(paper_trading_starting_equity),
         paper_signal_review_summary=_default_paper_signal_review_summary(
@@ -614,7 +630,9 @@ def _load_hypothesis_review(
     )
     latest_summary = analyzer.load_latest_summary() or analyzer.build_summary()
     recent_summaries = analyzer.load_recent_summaries(limit=limit)
+    review_rows = analyzer.list_outcome_rows(limit=max(limit * 4, 200))
     return {
+        "outcomes": review_rows,
         "latest_summary": asdict(latest_summary) if latest_summary else None,
         "recent_summaries": [asdict(summary) for summary in recent_summaries],
     }
@@ -990,6 +1008,21 @@ def _fetch_recent_paper_journal_notes(connection: sqlite3.Connection, limit: int
         connection,
         """
         SELECT * FROM paper_journal_notes
+        WHERE is_deleted = 0
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+
+
+def _fetch_recent_hypothesis_review_notes(connection: sqlite3.Connection, limit: int) -> list[dict[str, Any]]:
+    if not _table_exists(connection, "hypothesis_review_notes"):
+        return []
+    return _fetch_all(
+        connection,
+        """
+        SELECT * FROM hypothesis_review_notes
         WHERE is_deleted = 0
         ORDER BY id DESC
         LIMIT ?

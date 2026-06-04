@@ -18,6 +18,7 @@ from core.models import (
 )
 
 logger = logging.getLogger(__name__)
+_UNSET = object()
 
 
 class WorkflowRepository:
@@ -381,9 +382,10 @@ class WorkflowRepository:
                     avg_max_adverse_move_pct,
                     promoted_candidates_json,
                     blocked_candidates_json,
+                    candidate_progress_json,
                     warnings_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     (summary.created_at or datetime.now(UTC)).isoformat(),
@@ -409,6 +411,7 @@ class WorkflowRepository:
                     summary.avg_max_adverse_move_pct,
                     json.dumps(summary.promoted_candidates),
                     json.dumps(summary.blocked_candidates),
+                    json.dumps(summary.candidate_progress),
                     json.dumps(summary.warnings),
                 ),
             )
@@ -417,7 +420,154 @@ class WorkflowRepository:
             summary.evaluated_outcomes,
         )
 
+    def add_hypothesis_review_note(
+        self,
+        *,
+        note_type: str,
+        reference_type: str,
+        note_text: str,
+        reference_id: str | None = None,
+        asset: str | None = None,
+        strategy_family: str | None = None,
+        regime: str | None = None,
+        horizon_hours: int | None = None,
+        title: str | None = None,
+        tags: str | None = None,
+    ) -> int:
+        with self._connect() as connection:
+            if not self._table_exists(connection, "hypothesis_review_notes"):
+                return 0
+            cursor = connection.execute(
+                """
+                INSERT INTO hypothesis_review_notes (
+                    note_type,
+                    reference_type,
+                    reference_id,
+                    asset,
+                    strategy_family,
+                    regime,
+                    horizon_hours,
+                    title,
+                    note_text,
+                    tags
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    note_type,
+                    reference_type,
+                    reference_id,
+                    asset,
+                    strategy_family,
+                    regime,
+                    horizon_hours,
+                    title,
+                    note_text,
+                    tags,
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_hypothesis_review_notes(
+        self,
+        *,
+        limit: int = 100,
+        include_deleted: bool = False,
+    ) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            if not self._table_exists(connection, "hypothesis_review_notes"):
+                return []
+            predicate = "" if include_deleted else "WHERE is_deleted = 0"
+            rows = connection.execute(
+                f"""
+                SELECT * FROM hypothesis_review_notes
+                {predicate}
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_hypothesis_review_note(
+        self,
+        note_id: int,
+        *,
+        note_type: object = _UNSET,
+        reference_type: object = _UNSET,
+        reference_id: object = _UNSET,
+        asset: object = _UNSET,
+        strategy_family: object = _UNSET,
+        regime: object = _UNSET,
+        horizon_hours: object = _UNSET,
+        title: object = _UNSET,
+        note_text: object = _UNSET,
+        tags: object = _UNSET,
+    ) -> bool:
+        with self._connect() as connection:
+            if not self._table_exists(connection, "hypothesis_review_notes"):
+                return False
+
+            assignments: list[str] = []
+            values: list[object] = []
+            for column_name, value in (
+                ("note_type", note_type),
+                ("reference_type", reference_type),
+                ("reference_id", reference_id),
+                ("asset", asset),
+                ("strategy_family", strategy_family),
+                ("regime", regime),
+                ("horizon_hours", horizon_hours),
+                ("title", title),
+                ("note_text", note_text),
+                ("tags", tags),
+            ):
+                if value is _UNSET:
+                    continue
+                assignments.append(f"{column_name} = ?")
+                values.append(value)
+
+            if not assignments:
+                return False
+
+            assignments.append("updated_at = ?")
+            values.append(datetime.now(UTC).isoformat())
+            values.append(note_id)
+            cursor = connection.execute(
+                f"""
+                UPDATE hypothesis_review_notes
+                SET {", ".join(assignments)}
+                WHERE id = ?
+                """,
+                tuple(values),
+            )
+            return cursor.rowcount > 0
+
+    def soft_delete_hypothesis_review_note(self, note_id: int) -> bool:
+        with self._connect() as connection:
+            if not self._table_exists(connection, "hypothesis_review_notes"):
+                return False
+            cursor = connection.execute(
+                """
+                UPDATE hypothesis_review_notes
+                SET is_deleted = 1,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (datetime.now(UTC).isoformat(), note_id),
+            )
+            return cursor.rowcount > 0
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
+        connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON;")
         return connection
+
+    @staticmethod
+    def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
+        row = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        return row is not None

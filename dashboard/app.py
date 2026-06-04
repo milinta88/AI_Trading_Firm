@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import MISSING
-from datetime import date
+from dataclasses import MISSING, asdict
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
 
+from analytics.hypothesis_review import summarize_hypothesis_review_rows
+from analytics.hypothesis_review_export import (
+    HYPOTHESIS_REVIEW_NOTE_HEADERS,
+    HYPOTHESIS_REVIEW_SUMMARY_HEADERS,
+    HypothesisReviewExportService,
+)
+from core.config import HypothesisReviewBucketsConfig, HypothesisReviewConfig
+from database.repository import WorkflowRepository
 from database.init_db import initialize_database
 from dashboard.data_loader import DashboardData, filter_rows, load_dashboard_data, rows_to_csv
 from paper_trading.export_service import PaperTradingExportService
@@ -569,52 +577,51 @@ def _render_strategy_hypotheses(data: DashboardData, filters: dict[str, Any]) ->
     st.markdown("#### Strategy Hypothesis Outcomes")
     if not getattr(data, "hypothesis_outcomes_enabled", False):
         st.info("Hypothesis outcomes are disabled in config.")
-        return
+    else:
+        outcome_summary = getattr(data, "hypothesis_outcome_summary", None) or {}
+        col_total, col_favorable, col_unfavorable, col_pending = st.columns(4)
+        col_total.metric("Total Outcomes", outcome_summary.get("total_evaluated", 0))
+        col_favorable.metric("Favorable", outcome_summary.get("favorable_count", 0))
+        col_unfavorable.metric("Unfavorable", outcome_summary.get("unfavorable_count", 0))
+        col_pending.metric(
+            "Pending / Insufficient",
+            f"{outcome_summary.get('pending_count', 0)} / {outcome_summary.get('insufficient_followup_count', 0)}",
+        )
 
-    outcome_summary = getattr(data, "hypothesis_outcome_summary", None) or {}
-    col_total, col_favorable, col_unfavorable, col_pending = st.columns(4)
-    col_total.metric("Total Outcomes", outcome_summary.get("total_evaluated", 0))
-    col_favorable.metric("Favorable", outcome_summary.get("favorable_count", 0))
-    col_unfavorable.metric("Unfavorable", outcome_summary.get("unfavorable_count", 0))
-    col_pending.metric(
-        "Pending / Insufficient",
-        f"{outcome_summary.get('pending_count', 0)} / {outcome_summary.get('insufficient_followup_count', 0)}",
-    )
+        st.markdown("#### Outcome Rate By Asset")
+        _render_table(
+            outcome_summary.get("by_asset", []),
+            empty_message="No hypothesis outcome asset summary is available yet.",
+        )
 
-    st.markdown("#### Outcome Rate By Asset")
-    _render_table(
-        outcome_summary.get("by_asset", []),
-        empty_message="No hypothesis outcome asset summary is available yet.",
-    )
+        st.markdown("#### Outcome Rate By Strategy Family")
+        _render_table(
+            outcome_summary.get("by_strategy_family", []),
+            empty_message="No hypothesis outcome family summary is available yet.",
+        )
 
-    st.markdown("#### Outcome Rate By Strategy Family")
-    _render_table(
-        outcome_summary.get("by_strategy_family", []),
-        empty_message="No hypothesis outcome family summary is available yet.",
-    )
+        st.markdown("#### Latest Hypothesis Outcomes")
+        latest_outcomes = filter_rows(
+            getattr(data, "latest_hypothesis_outcomes", []),
+            asset=filters.get("asset"),
+        )
+        _render_table(
+            _hypothesis_outcome_rows(latest_outcomes),
+            empty_message="No latest hypothesis outcomes are available yet.",
+        )
 
-    st.markdown("#### Latest Hypothesis Outcomes")
-    latest_outcomes = filter_rows(
-        getattr(data, "latest_hypothesis_outcomes", []),
-        asset=filters.get("asset"),
-    )
-    _render_table(
-        _hypothesis_outcome_rows(latest_outcomes),
-        empty_message="No latest hypothesis outcomes are available yet.",
-    )
-
-    st.markdown("#### Recent Hypothesis Outcome History")
-    recent_outcomes = filter_rows(
-        getattr(data, "recent_hypothesis_outcomes", []),
-        start_date=filters.get("start_date"),
-        end_date=filters.get("end_date"),
-        asset=filters.get("asset"),
-        limit=filters.get("limit"),
-    )
-    _render_table(
-        _hypothesis_outcome_rows(recent_outcomes),
-        empty_message="No recent hypothesis outcome history matches the selected filters.",
-    )
+        st.markdown("#### Recent Hypothesis Outcome History")
+        recent_outcomes = filter_rows(
+            getattr(data, "recent_hypothesis_outcomes", []),
+            start_date=filters.get("start_date"),
+            end_date=filters.get("end_date"),
+            asset=filters.get("asset"),
+            limit=filters.get("limit"),
+        )
+        _render_table(
+            _hypothesis_outcome_rows(recent_outcomes),
+            empty_message="No recent hypothesis outcome history matches the selected filters.",
+        )
 
     st.markdown("#### Hypothesis Review Analytics")
     st.caption("REVIEW ONLY / NO TRADING")
@@ -622,71 +629,127 @@ def _render_strategy_hypotheses(data: DashboardData, filters: dict[str, Any]) ->
         st.info("Hypothesis review analytics are disabled in config.")
         return
 
-    review_summary = getattr(data, "latest_hypothesis_review_summary", None)
-    if not review_summary:
+    review_summary = getattr(data, "latest_hypothesis_review_summary", None) or {}
+    review_rows = list(getattr(data, "hypothesis_review_outcomes", []))
+    review_config = _coerce_hypothesis_review_config(getattr(data, "hypothesis_review_config", None))
+
+    if not review_rows and not review_summary:
         st.info("No hypothesis review analytics are available yet.")
         return
 
-    col_eval, col_fav, col_unfav, col_neutral = st.columns(4)
-    col_eval.metric("Evaluated Outcomes", review_summary.get("evaluated_outcomes", 0))
-    col_fav.metric("Favorable Rate", f"{float(review_summary.get('favorable_rate', 0.0)):.0%}")
-    col_unfav.metric("Unfavorable Rate", f"{float(review_summary.get('unfavorable_rate', 0.0)):.0%}")
-    col_neutral.metric("Neutral Rate", f"{float(review_summary.get('neutral_rate', 0.0)):.0%}")
+    review_filters = _render_hypothesis_review_filters(review_rows)
+    filtered_review_rows = _filter_hypothesis_review_rows(
+        review_rows,
+        asset=review_filters.get("asset"),
+        strategy_family=review_filters.get("strategy_family"),
+        regime=review_filters.get("regime"),
+        horizon_hours=review_filters.get("horizon_hours"),
+        outcome_status=review_filters.get("outcome_status"),
+        readiness_bucket=review_filters.get("readiness_bucket"),
+        hypothesis_status=review_filters.get("hypothesis_status"),
+        start_date=review_filters.get("start_date"),
+        end_date=review_filters.get("end_date"),
+    )
+
+    if filtered_review_rows:
+        filtered_summary = asdict(
+            summarize_hypothesis_review_rows(
+                filtered_review_rows,
+                config=review_config,
+                lookback_days=int(getattr(data, "hypothesis_review_lookback_days", 14) or 14),
+            )
+        )
+    else:
+        filtered_summary = dict(review_summary)
+
+    col_sample, col_fav, col_unfav, col_neutral, col_move, col_mae = st.columns(6)
+    col_sample.metric("Sample Size", int(filtered_summary.get("evaluated_outcomes", 0)))
+    col_fav.metric("Favorable", int(filtered_summary.get("favorable_count", 0)))
+    col_unfav.metric("Unfavorable", int(filtered_summary.get("unfavorable_count", 0)))
+    col_neutral.metric("Neutral", int(filtered_summary.get("neutral_count", 0)))
+    col_move.metric("Avg Move %", _format_metric(filtered_summary.get("avg_move_pct")))
+    col_mae.metric("Avg MAE %", _format_metric(filtered_summary.get("avg_max_adverse_move_pct")))
 
     _render_key_value_grid(
         {
-            "Total Outcomes": review_summary.get("total_outcomes"),
-            "Insufficient Follow-Up": review_summary.get("insufficient_followup_count"),
-            "Blocked Not Evaluated": review_summary.get("blocked_not_evaluated_count"),
-            "Average Move %": review_summary.get("avg_move_pct"),
-            "Average Max Favorable Move %": review_summary.get("avg_max_favorable_move_pct"),
-            "Average Max Adverse Move %": review_summary.get("avg_max_adverse_move_pct"),
+            "Total Outcomes": filtered_summary.get("total_outcomes"),
+            "Favorable Rate": _format_ratio(filtered_summary.get("favorable_rate")),
+            "Unfavorable Rate": _format_ratio(filtered_summary.get("unfavorable_rate")),
+            "Neutral Rate": _format_ratio(filtered_summary.get("neutral_rate")),
+            "Insufficient Follow-Up": filtered_summary.get("insufficient_followup_count"),
+            "Blocked Not Evaluated": filtered_summary.get("blocked_not_evaluated_count"),
+            "Average Max Favorable Move %": filtered_summary.get("avg_max_favorable_move_pct"),
         }
+    )
+
+    _render_hypothesis_review_exports(
+        data=data,
+        filtered_review_rows=filtered_review_rows,
+        latest_summary=review_summary,
+    )
+
+    st.markdown("#### Filtered Hypothesis Outcomes")
+    _render_table(
+        _hypothesis_review_outcome_rows(filtered_review_rows[: int(filters.get("limit") or len(filtered_review_rows) or 0)]),
+        empty_message="No hypothesis review outcomes match the selected drilldown filters.",
     )
 
     st.markdown("#### By Asset")
     _render_table(
-        getattr(review_summary, "get", lambda *_: [])("by_asset", []),
+        filtered_summary.get("by_asset", []),
         empty_message="No asset-level hypothesis review analytics are available yet.",
     )
 
     st.markdown("#### By Strategy Family")
     _render_table(
-        getattr(review_summary, "get", lambda *_: [])("by_strategy_family", []),
+        filtered_summary.get("by_strategy_family", []),
         empty_message="No strategy-family hypothesis review analytics are available yet.",
     )
 
     st.markdown("#### By Regime")
     _render_table(
-        getattr(review_summary, "get", lambda *_: [])("by_regime", []),
+        filtered_summary.get("by_regime", []),
         empty_message="No regime-level hypothesis review analytics are available yet.",
     )
 
     st.markdown("#### By Horizon")
     _render_table(
-        getattr(review_summary, "get", lambda *_: [])("by_horizon", []),
+        filtered_summary.get("by_horizon", []),
         empty_message="No horizon-level hypothesis review analytics are available yet.",
     )
 
     st.markdown("#### Readiness Buckets")
     _render_table(
-        getattr(review_summary, "get", lambda *_: [])("by_readiness_bucket", []),
+        filtered_summary.get("by_readiness_bucket", []),
         empty_message="No readiness-bucket analytics are available yet.",
+    )
+
+    st.markdown("#### Candidate Progress")
+    _render_table(
+        _candidate_progress_rows(filtered_summary.get("candidate_progress", [])),
+        empty_message="No candidate progress is available yet.",
     )
 
     st.markdown("#### Review Candidates")
     _render_table(
-        getattr(review_summary, "get", lambda *_: [])("promoted_candidates", []),
+        filtered_summary.get("promoted_candidates", []),
         empty_message="No review candidates have met the current thresholds yet.",
     )
 
     st.markdown("#### Blocked Candidates")
     _render_table(
-        getattr(review_summary, "get", lambda *_: [])("blocked_candidates", []),
+        filtered_summary.get("blocked_candidates", []),
         empty_message="No blocked candidates are available yet.",
     )
 
-    _render_text_list("Warnings", getattr(review_summary, "get", lambda *_: [])("warnings", []))
+    st.markdown("#### Review Summary History")
+    _render_table(
+        _hypothesis_review_summary_rows(getattr(data, "recent_hypothesis_review_summaries", [])),
+        empty_message="No persisted hypothesis review summary history is available yet.",
+    )
+
+    _render_text_list("Warnings", filtered_summary.get("warnings", []))
+    _render_hypothesis_review_notes(data, review_filters)
 
 
 def _render_archive_date_filter(items: list[dict[str, Any]]) -> tuple[date | None, date | None]:
@@ -769,6 +832,21 @@ def _archive_row_date(row: dict[str, Any]) -> date | None:
         or _coerce_date(row.get("completed_at"))
         or _coerce_date(row.get("created_at"))
     )
+
+
+def _dashboard_row_date(row: dict[str, Any]) -> date | None:
+    raw_value = row.get("timestamp") or row.get("evaluated_at") or row.get("created_at") or row.get("completed_at")
+    if not raw_value:
+        return None
+    if isinstance(raw_value, datetime):
+        return raw_value.date()
+    if isinstance(raw_value, date):
+        return raw_value
+    text = str(raw_value).replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(text).date()
+    except ValueError:
+        return None
 
 
 def _archive_search_text(row: dict[str, Any]) -> str:
@@ -1256,6 +1334,66 @@ def _hypothesis_outcome_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
     ]
 
 
+def _hypothesis_review_outcome_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "asset": row.get("asset"),
+            "strategy_family": row.get("strategy_family"),
+            "regime": row.get("regime"),
+            "readiness_bucket": row.get("readiness_bucket"),
+            "hypothesis_status": row.get("hypothesis_status"),
+            "horizon_hours": row.get("horizon_hours"),
+            "outcome_status": row.get("outcome_status"),
+            "move_pct": row.get("move_pct"),
+            "max_favorable_move_pct": row.get("max_favorable_move_pct"),
+            "max_adverse_move_pct": row.get("max_adverse_move_pct"),
+            "created_at": row.get("created_at"),
+            "evaluated_at": row.get("evaluated_at"),
+            "reason": row.get("reason"),
+        }
+        for row in rows
+    ]
+
+
+def _hypothesis_review_summary_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "created_at": row.get("created_at"),
+            "lookback_days": row.get("lookback_days"),
+            "total_outcomes": row.get("total_outcomes"),
+            "evaluated_outcomes": row.get("evaluated_outcomes"),
+            "favorable_rate": row.get("favorable_rate"),
+            "unfavorable_rate": row.get("unfavorable_rate"),
+            "neutral_rate": row.get("neutral_rate"),
+            "review_candidates": len(row.get("promoted_candidates", [])) if isinstance(row.get("promoted_candidates"), list) else 0,
+            "blocked_candidates": len(row.get("blocked_candidates", [])) if isinstance(row.get("blocked_candidates"), list) else 0,
+            "warnings": "; ".join(row.get("warnings", [])) if isinstance(row.get("warnings"), list) else row.get("warnings"),
+        }
+        for row in rows
+    ]
+
+
+def _candidate_progress_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "asset": row.get("asset"),
+            "strategy_family": row.get("strategy_family"),
+            "candidate_status": row.get("candidate_status"),
+            "evaluated_outcomes": row.get("evaluated_outcomes"),
+            "required_min_outcomes": row.get("required_min_outcomes"),
+            "samples_needed": row.get("samples_needed"),
+            "favorable_rate": row.get("favorable_rate"),
+            "required_favorable_rate": row.get("required_favorable_rate"),
+            "unfavorable_rate": row.get("unfavorable_rate"),
+            "max_unfavorable_rate": row.get("max_unfavorable_rate"),
+            "avg_adverse_move": row.get("avg_adverse_move"),
+            "max_allowed_adverse_move": row.get("max_allowed_adverse_move"),
+            "reason": row.get("reason"),
+        }
+        for row in rows
+    ]
+
+
 def _research_readiness_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
@@ -1283,6 +1421,27 @@ def _paper_journal_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "reference_id": row.get("reference_id"),
             "asset": row.get("asset"),
             "profile": row.get("profile"),
+            "title": row.get("title"),
+            "note_text": row.get("note_text"),
+            "tags": row.get("tags"),
+        }
+        for row in rows
+    ]
+
+
+def _hypothesis_review_note_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": row.get("id"),
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+            "note_type": row.get("note_type"),
+            "reference_type": row.get("reference_type"),
+            "reference_id": row.get("reference_id"),
+            "asset": row.get("asset"),
+            "strategy_family": row.get("strategy_family"),
+            "regime": row.get("regime"),
+            "horizon_hours": row.get("horizon_hours"),
             "title": row.get("title"),
             "note_text": row.get("note_text"),
             "tags": row.get("tags"),
@@ -1321,12 +1480,297 @@ def _filter_signal_reviews(
     return filtered
 
 
+def _coerce_hypothesis_review_config(raw_config: Any) -> HypothesisReviewConfig:
+    if isinstance(raw_config, HypothesisReviewConfig):
+        return raw_config
+    if isinstance(raw_config, dict):
+        raw_buckets = raw_config.get("readiness_buckets", {})
+        bucket_values = raw_buckets if isinstance(raw_buckets, dict) else {}
+        raw_thresholds = raw_config.get("max_avg_adverse_move_pct_for_candidate", {})
+        thresholds = {"BTC": 1.5, "Gold": 0.8}
+        if isinstance(raw_thresholds, dict):
+            for asset_key, default_value in thresholds.items():
+                thresholds[asset_key] = float(raw_thresholds.get(asset_key, default_value))
+        return HypothesisReviewConfig(
+            enabled=bool(raw_config.get("enabled", False)),
+            min_evaluated_outcomes_for_candidate=int(raw_config.get("min_evaluated_outcomes_for_candidate", 10)),
+            min_favorable_rate_for_candidate=float(raw_config.get("min_favorable_rate_for_candidate", 0.55)),
+            max_unfavorable_rate_for_candidate=float(raw_config.get("max_unfavorable_rate_for_candidate", 0.40)),
+            max_avg_adverse_move_pct_for_candidate=thresholds,
+            readiness_buckets=HypothesisReviewBucketsConfig(
+                low_below=int(bucket_values.get("low_below", 50)),
+                medium_below=int(bucket_values.get("medium_below", 70)),
+            ),
+        )
+    return HypothesisReviewConfig(
+        enabled=False,
+        min_evaluated_outcomes_for_candidate=10,
+        min_favorable_rate_for_candidate=0.55,
+        max_unfavorable_rate_for_candidate=0.40,
+        max_avg_adverse_move_pct_for_candidate={"BTC": 1.5, "Gold": 0.8},
+        readiness_buckets=HypothesisReviewBucketsConfig(low_below=50, medium_below=70),
+    )
+
+
+def _render_hypothesis_review_filters(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    assets = sorted({str(row.get("asset")) for row in rows if row.get("asset")})
+    families = sorted({str(row.get("strategy_family")) for row in rows if row.get("strategy_family")})
+    regimes = sorted({str(row.get("regime")) for row in rows if row.get("regime")})
+    horizons = sorted({int(row.get("horizon_hours")) for row in rows if row.get("horizon_hours") is not None})
+    outcome_statuses = sorted({str(row.get("outcome_status")) for row in rows if row.get("outcome_status")})
+    readiness_buckets = sorted({str(row.get("readiness_bucket")) for row in rows if row.get("readiness_bucket")})
+    hypothesis_statuses = sorted({str(row.get("hypothesis_status")) for row in rows if row.get("hypothesis_status")})
+
+    st.markdown("#### Drilldown Filters")
+    filter_cols = st.columns(4)
+    selected_asset = filter_cols[0].selectbox("Review Asset", ["All", *assets], key="review_asset")
+    selected_family = filter_cols[1].selectbox("Strategy Family", ["All", *families], key="review_strategy_family")
+    selected_regime = filter_cols[2].selectbox("Regime", ["All", *regimes], key="review_regime")
+    selected_horizon = filter_cols[3].selectbox("Horizon", ["All", *horizons], key="review_horizon")
+
+    filter_cols_2 = st.columns(3)
+    selected_outcome_status = filter_cols_2[0].selectbox(
+        "Outcome Status",
+        ["All", *outcome_statuses],
+        key="review_outcome_status",
+    )
+    selected_readiness_bucket = filter_cols_2[1].selectbox(
+        "Readiness Bucket",
+        ["All", *readiness_buckets],
+        key="review_readiness_bucket",
+    )
+    selected_hypothesis_status = filter_cols_2[2].selectbox(
+        "Hypothesis Status",
+        ["All", *hypothesis_statuses],
+        key="review_hypothesis_status",
+    )
+
+    start_date: date | None = None
+    end_date: date | None = None
+    available_dates = [row_date for row in (_row_date(row) for row in rows) if row_date is not None]
+    if available_dates:
+        min_date = min(available_dates)
+        max_date = max(available_dates)
+        selected_dates = st.date_input(
+            "Review Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+            key="review_date_range",
+        )
+        if isinstance(selected_dates, tuple):
+            if len(selected_dates) == 2:
+                start_date, end_date = selected_dates
+            elif len(selected_dates) == 1:
+                start_date = end_date = selected_dates[0]
+        elif isinstance(selected_dates, date):
+            start_date = end_date = selected_dates
+
+    return {
+        "asset": None if selected_asset == "All" else selected_asset,
+        "strategy_family": None if selected_family == "All" else selected_family,
+        "regime": None if selected_regime == "All" else selected_regime,
+        "horizon_hours": None if selected_horizon == "All" else int(selected_horizon),
+        "outcome_status": None if selected_outcome_status == "All" else selected_outcome_status,
+        "readiness_bucket": None if selected_readiness_bucket == "All" else selected_readiness_bucket,
+        "hypothesis_status": None if selected_hypothesis_status == "All" else selected_hypothesis_status,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
+
+def _filter_hypothesis_review_rows(
+    rows: list[dict[str, Any]],
+    *,
+    asset: str | None = None,
+    strategy_family: str | None = None,
+    regime: str | None = None,
+    horizon_hours: int | None = None,
+    outcome_status: str | None = None,
+    readiness_bucket: str | None = None,
+    hypothesis_status: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for row in rows:
+        if asset and str(row.get("asset")) != asset:
+            continue
+        if strategy_family and str(row.get("strategy_family")) != strategy_family:
+            continue
+        if regime and str(row.get("regime")) != regime:
+            continue
+        if horizon_hours is not None and int(row.get("horizon_hours") or 0) != int(horizon_hours):
+            continue
+        if outcome_status and str(row.get("outcome_status")) != outcome_status:
+            continue
+        if readiness_bucket and str(row.get("readiness_bucket")) != readiness_bucket:
+            continue
+        if hypothesis_status and str(row.get("hypothesis_status")) != hypothesis_status:
+            continue
+        row_date = _dashboard_row_date(row)
+        if start_date and row_date and row_date < start_date:
+            continue
+        if end_date and row_date and row_date > end_date:
+            continue
+        if (start_date or end_date) and row_date is None:
+            continue
+        filtered.append(row)
+    return filtered
+
+
+def _render_hypothesis_review_exports(
+    *,
+    data: DashboardData,
+    filtered_review_rows: list[dict[str, Any]],
+    latest_summary: dict[str, Any],
+) -> None:
+    st.markdown("#### Review Exports")
+    st.caption("Local-only CSV exports for persisted review data and currently filtered review outcomes.")
+
+    export_service = None
+    if data.database_path:
+        export_service = HypothesisReviewExportService(data.database_path)
+
+    export_cols = st.columns(3)
+    export_cols[0].download_button(
+        label="Download filtered hypothesis outcomes CSV",
+        data=rows_to_csv(_hypothesis_review_outcome_rows(filtered_review_rows)),
+        file_name="filtered_hypothesis_review_outcomes.csv",
+        mime="text/csv",
+    )
+    export_cols[1].download_button(
+        label="Download latest review summary CSV",
+        data=rows_to_csv([_summary_export_row(latest_summary)], HYPOTHESIS_REVIEW_SUMMARY_HEADERS),
+        file_name="latest_hypothesis_review_summary.csv",
+        mime="text/csv",
+    )
+    notes_csv = export_service.export_review_notes_csv() if export_service else rows_to_csv([], HYPOTHESIS_REVIEW_NOTE_HEADERS)
+    export_cols[2].download_button(
+        label="Download notes CSV",
+        data=notes_csv,
+        file_name="hypothesis_review_notes.csv",
+        mime="text/csv",
+    )
+
+
+def _render_hypothesis_review_notes(data: DashboardData, filters: dict[str, Any]) -> None:
+    data = _coerce_dashboard_data(data)
+    st.markdown("#### Review Tags And Notes")
+    st.caption("Local review metadata only. Notes and tags do not change scores, hypotheses, paper orders, or execution state.")
+
+    strategy_families = sorted(
+        {str(row.get("strategy_family")) for row in data.hypothesis_review_outcomes if row.get("strategy_family")}
+    )
+    regimes = sorted({str(row.get("regime")) for row in data.hypothesis_review_outcomes if row.get("regime")})
+    horizons = sorted({int(row.get("horizon_hours")) for row in data.hypothesis_review_outcomes if row.get("horizon_hours") is not None})
+
+    if data.database_path:
+        with st.form("hypothesis_review_note_form", clear_on_submit=True):
+            note_type = st.selectbox(
+                "Note Type",
+                ["GENERAL", "OBSERVATION", "FOLLOW_UP", "CANDIDATE_REVIEW"],
+                key="hypothesis_review_note_type",
+            )
+            reference_type = st.selectbox(
+                "Reference Type",
+                ["GENERAL", "HYPOTHESIS", "OUTCOME", "REVIEW_SUMMARY", "STRATEGY_FAMILY"],
+                key="hypothesis_review_reference_type",
+            )
+            title = st.text_input("Title (optional)", key="hypothesis_review_title")
+            ref_col, asset_col, family_col = st.columns(3)
+            reference_id = _optional_text(ref_col.text_input("Reference ID (optional)", key="hypothesis_review_reference_id"))
+            asset = asset_col.selectbox("Asset", ["", "BTC", "Gold"], key="hypothesis_review_asset")
+            strategy_family = family_col.selectbox("Strategy Family", ["", *strategy_families], key="hypothesis_review_strategy_family")
+            regime_col, horizon_col, tags_col = st.columns(3)
+            regime = regime_col.selectbox("Regime", ["", *regimes], key="hypothesis_review_regime")
+            horizon_value = horizon_col.selectbox("Horizon", ["", *horizons], key="hypothesis_review_horizon")
+            tags = _optional_text(tags_col.text_input("Tags (comma-separated)", key="hypothesis_review_tags"))
+            note_text = st.text_area("Review Note", key="hypothesis_review_note_text", height=120)
+            submitted = st.form_submit_button("Add Review Note")
+            if submitted:
+                cleaned_note = note_text.strip()
+                if not cleaned_note:
+                    st.warning("Review note text is required.")
+                else:
+                    note_id = WorkflowRepository(data.database_path).add_hypothesis_review_note(
+                        note_type=note_type,
+                        reference_type=reference_type,
+                        reference_id=reference_id,
+                        asset=_optional_text(asset),
+                        strategy_family=_optional_text(strategy_family),
+                        regime=_optional_text(regime),
+                        horizon_hours=int(horizon_value) if horizon_value not in {"", None} else None,
+                        title=_optional_text(title),
+                        note_text=cleaned_note,
+                        tags=tags,
+                    )
+                    if note_id:
+                        st.success(f"Saved review note #{note_id}.")
+                    else:
+                        st.error("Unable to save the review note to SQLite.")
+    else:
+        st.info("Review notes require the local SQLite database to be available.")
+
+    filtered_notes = _filter_hypothesis_review_rows(
+        data.hypothesis_review_notes,
+        asset=filters.get("asset"),
+        strategy_family=filters.get("strategy_family"),
+        regime=filters.get("regime"),
+        horizon_hours=filters.get("horizon_hours"),
+        start_date=filters.get("start_date"),
+        end_date=filters.get("end_date"),
+    )
+    _render_table(
+        _hypothesis_review_note_rows(filtered_notes),
+        empty_message="No hypothesis review notes match the selected drilldown filters.",
+    )
+
+
+def _summary_export_row(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": summary.get("id"),
+        "created_at": summary.get("created_at"),
+        "lookback_days": summary.get("lookback_days"),
+        "total_outcomes": summary.get("total_outcomes"),
+        "evaluated_outcomes": summary.get("evaluated_outcomes"),
+        "favorable_count": summary.get("favorable_count"),
+        "unfavorable_count": summary.get("unfavorable_count"),
+        "neutral_count": summary.get("neutral_count"),
+        "insufficient_followup_count": summary.get("insufficient_followup_count"),
+        "blocked_not_evaluated_count": summary.get("blocked_not_evaluated_count"),
+        "favorable_rate": summary.get("favorable_rate"),
+        "unfavorable_rate": summary.get("unfavorable_rate"),
+        "neutral_rate": summary.get("neutral_rate"),
+        "by_asset_json": summary.get("by_asset"),
+        "by_strategy_family_json": summary.get("by_strategy_family"),
+        "by_regime_json": summary.get("by_regime"),
+        "by_horizon_json": summary.get("by_horizon"),
+        "by_readiness_bucket_json": summary.get("by_readiness_bucket"),
+        "by_hypothesis_status_json": summary.get("by_hypothesis_status"),
+        "avg_move_pct": summary.get("avg_move_pct"),
+        "avg_max_favorable_move_pct": summary.get("avg_max_favorable_move_pct"),
+        "avg_max_adverse_move_pct": summary.get("avg_max_adverse_move_pct"),
+        "promoted_candidates_json": summary.get("promoted_candidates"),
+        "blocked_candidates_json": summary.get("blocked_candidates"),
+        "candidate_progress_json": summary.get("candidate_progress"),
+        "warnings_json": summary.get("warnings"),
+    }
+
+
 def _format_metric(value: Any) -> str:
     if value is None:
         return "N/A"
     if isinstance(value, float):
         return f"{value:.2f}"
     return str(value)
+
+
+def _format_ratio(value: Any) -> str:
+    try:
+        return f"{float(value or 0.0):.0%}"
+    except (TypeError, ValueError):
+        return "0%"
 
 
 def _render_readiness_card(column, row: dict[str, Any] | None, min_score: int) -> None:

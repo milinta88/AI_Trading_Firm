@@ -270,6 +270,13 @@ class DailyReportFormatter:
                     f"  - Review Candidate: {candidate['strategy_family']} ({candidate['asset']}) "
                     f"fav={candidate['favorable_rate']:.0%} n={candidate['evaluated_outcomes']}"
                 )
+        elif summary.candidate_progress:
+            for candidate in summary.candidate_progress[:2]:
+                lines.append(
+                    f"  - Candidate Progress: {candidate['strategy_family']} ({candidate['asset']}) "
+                    f"{candidate['candidate_status']} n={candidate['evaluated_outcomes']}/"
+                    f"{candidate['required_min_outcomes']}"
+                )
         elif summary.blocked_candidates:
             for candidate in summary.blocked_candidates[:2]:
                 lines.append(

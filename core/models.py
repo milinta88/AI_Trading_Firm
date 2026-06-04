@@ -130,6 +130,7 @@ class HypothesisReviewSummary:
     warnings: list[str]
     promoted_candidates: list[dict[str, Any]]
     blocked_candidates: list[dict[str, Any]]
+    candidate_progress: list[dict[str, Any]]
     created_at: datetime | None = None
     lookback_days: int | None = None
 

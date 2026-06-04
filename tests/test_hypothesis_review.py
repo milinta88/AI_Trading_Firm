@@ -77,6 +77,7 @@ def test_promotion_candidate_requires_minimum_sample_size(tmp_path: Path) -> Non
     assert summary.promoted_candidates == []
     assert summary.blocked_candidates
     assert "minimum sample size" in summary.blocked_candidates[0]["reason"]
+    assert summary.candidate_progress[0]["candidate_status"] == "NEED_MORE_SAMPLES"
 
 
 def test_promotion_candidate_does_not_trigger_without_safe_adverse_profile(tmp_path: Path) -> None:
@@ -96,6 +97,25 @@ def test_promotion_candidate_does_not_trigger_without_safe_adverse_profile(tmp_p
     assert summary.promoted_candidates == []
     assert summary.blocked_candidates
     assert "adverse move" in summary.blocked_candidates[0]["reason"]
+    assert summary.candidate_progress[0]["candidate_status"] == "FAIL_ADVERSE_MOVE"
+
+
+def test_candidate_progress_can_reach_review_candidate_status(tmp_path: Path) -> None:
+    rows = [
+        _outcome_row(
+            status="FAVORABLE",
+            asset="BTC",
+            strategy_family="BTC_TREND_CONTINUATION",
+            regime="TREND_UP",
+            readiness_score=82,
+            max_adverse_move_pct=0.5,
+        )
+        for _ in range(10)
+    ]
+    summary = _build_summary_with_rows(tmp_path, rows)
+
+    assert summary.promoted_candidates
+    assert summary.candidate_progress[0]["candidate_status"] == "REVIEW_CANDIDATE"
 
 
 def _build_summary_with_rows(tmp_path: Path, rows: list[dict[str, object]]):

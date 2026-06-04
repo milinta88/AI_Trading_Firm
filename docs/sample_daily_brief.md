@@ -112,6 +112,7 @@ Hypothesis Review Analytics:
 - Evaluated: 12 | Favorable: 7 (58%) | Unfavorable: 3 (25%) | Neutral: 2 (17%)
 - Insufficient Follow-Up: 4 | Blocked Not Evaluated: 2
   - Review Candidate: BTC_SENTIMENT_MEAN_REVERSION (BTC) fav=58% n=12
+  - Candidate Progress: GOLD_MACRO_PRESSURE (Gold) NEED_MORE_SAMPLES n=4/10
   - Warning: Gold review sample size is still too small for any candidate flag.
 
 Macro Regime:

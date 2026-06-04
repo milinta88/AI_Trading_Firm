@@ -55,6 +55,7 @@ def test_daily_report_includes_hypothesis_review_section() -> None:
                 warnings=[],
                 promoted_candidates=[{"strategy_family": "BTC_TREND_CONTINUATION", "asset": "BTC", "favorable_rate": 0.6, "evaluated_outcomes": 10}],
                 blocked_candidates=[],
+                candidate_progress=[],
                 created_at=datetime(2026, 6, 2, tzinfo=UTC),
                 lookback_days=14,
             ),

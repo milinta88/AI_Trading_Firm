@@ -250,3 +250,13 @@ Phase 2.7 adds a higher-level read-only analytics layer over persisted hypothesi
 - Candidate flags are review-only and require minimum sample size plus favorable/unfavorable/adverse-move thresholds.
 - `python main.py --hypothesis-review` builds and optionally persists local review summaries without creating paper orders.
 - `python main.py --paper-report` and the dashboard can summarize the latest persisted review analytics for research-only review.
+
+## Phase 2.8 Hypothesis Review Drilldown, Tags, And Export
+
+Phase 2.8 adds practical review tooling around the persisted hypothesis review layer.
+
+- `python main.py --hypothesis-review-export` writes local CSV exports for hypotheses, hypothesis outcomes, and review summaries into `data/exports`.
+- Dashboard review drilldowns can slice persisted outcomes by asset, strategy family, regime, horizon, outcome status, readiness bucket, and hypothesis status.
+- Candidate-progress rows show whether a family is a `REVIEW_CANDIDATE`, still needs more samples, fails rate thresholds, fails adverse-move thresholds, or remains blocked.
+- Local `hypothesis_review_notes` store optional review tags and notes only; they do not create paper orders or change paper-trading thresholds.
+- All tooling remains review-only, local-only, and free of broker, MT5, private exchange API, or real execution behavior.

@@ -311,7 +311,25 @@ CREATE TABLE IF NOT EXISTS hypothesis_review_summaries (
     avg_max_adverse_move_pct REAL,
     promoted_candidates_json TEXT NOT NULL,
     blocked_candidates_json TEXT NOT NULL,
+    candidate_progress_json TEXT NOT NULL DEFAULT '[]',
     warnings_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hypothesis_review_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT,
+    note_type TEXT NOT NULL,
+    reference_type TEXT NOT NULL,
+    reference_id TEXT,
+    asset TEXT,
+    strategy_family TEXT,
+    regime TEXT,
+    horizon_hours INTEGER,
+    title TEXT,
+    note_text TEXT NOT NULL,
+    tags TEXT,
+    is_deleted INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -332,6 +350,12 @@ def _run_schema_migrations(connection: sqlite3.Connection) -> None:
         table_name="paper_run_summaries",
         column_name="active_profile",
         column_definition="TEXT NOT NULL DEFAULT 'conservative'",
+    )
+    _ensure_column(
+        connection,
+        table_name="hypothesis_review_summaries",
+        column_name="candidate_progress_json",
+        column_definition="TEXT NOT NULL DEFAULT '[]'",
     )
 
 

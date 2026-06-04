@@ -309,6 +309,12 @@ def _format_hypothesis_review_summary(summary: HypothesisReviewSummary) -> list[
             f"- {candidate['strategy_family']} | Asset {candidate['asset']} | Favorable {candidate['favorable_rate']:.2%} | Evaluated {candidate['evaluated_outcomes']}"
             for candidate in summary.promoted_candidates[:5]
         )
+    if summary.candidate_progress:
+        lines.append("Candidate Progress:")
+        lines.extend(
+            f"- {candidate['strategy_family']} | {candidate['candidate_status']} | n={candidate['evaluated_outcomes']}/{candidate['required_min_outcomes']} | fav={candidate['favorable_rate']:.0%}/{candidate['required_favorable_rate']:.0%}"
+            for candidate in summary.candidate_progress[:5]
+        )
     if summary.blocked_candidates:
         lines.append("Blocked Candidates:")
         lines.extend(

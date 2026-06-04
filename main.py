@@ -12,6 +12,7 @@ from agents.gold_fundamental_bot import GoldFundamentalBot
 from agents.orchestrator_bot import OrchestratorBot
 from analytics.hypothesis_outcomes import HypothesisOutcomeEvaluator
 from analytics.hypothesis_review import HypothesisReviewAnalyzer
+from analytics.hypothesis_review_export import HypothesisReviewExportService
 from analytics.research_readiness import ResearchReadinessAnalyzer
 from analytics.strategy_hypothesis import StrategyHypothesisEngine
 from analytics.trend_analyzer import TrendAnalyzer
@@ -75,6 +76,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--hypothesis-review",
         action="store_true",
         help="Build read-only hypothesis review analytics from persisted hypothesis outcomes only.",
+    )
+    parser.add_argument(
+        "--hypothesis-review-export",
+        action="store_true",
+        help="Export persisted hypothesis review CSV files to data/exports without running any workflow or simulation.",
     )
     return parser.parse_args(argv)
 
@@ -220,6 +226,16 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             logger.exception("Hypothesis review analytics failed.")
             return 1
+    if args.hypothesis_review_export:
+        logger.info("Exporting local hypothesis review CSV files.")
+        try:
+            initialize_database(config.database_path)
+            for export_path in export_hypothesis_review_files(config, project_root):
+                print(export_path)
+            return 0
+        except Exception:
+            logger.exception("Hypothesis review export failed.")
+            return 1
 
     workflow_label = "Telegram test" if runtime_options.test_telegram else "daily brief"
     logger.info("Starting %s %s workflow in %s mode.", config.app_name, workflow_label, config.mode)
@@ -313,6 +329,15 @@ def export_paper_review_files(config: AppConfig, project_root: Path) -> list[Pat
     ]
 
 
+def export_hypothesis_review_files(config: AppConfig, project_root: Path) -> list[Path]:
+    export_service = HypothesisReviewExportService(config.database_path)
+    export_dir = project_root / "data" / "exports"
+    return [
+        artifact.path
+        for artifact in export_service.write_review_exports(export_dir)
+    ]
+
+
 def evaluate_hypothesis_outcomes(config: AppConfig) -> str:
     evaluator = HypothesisOutcomeEvaluator(
         config=config.hypothesis_outcomes,
@@ -392,6 +417,17 @@ def build_hypothesis_review_report(config: AppConfig) -> str:
                 f"- {candidate['strategy_family']} | Asset {candidate['asset']} | "
                 f"Evaluated {candidate['evaluated_outcomes']} | Favorable {candidate['favorable_rate']:.2%}"
             )
+    if summary.candidate_progress:
+        lines.extend(["", "Candidate Progress:"])
+        for candidate in summary.candidate_progress[:10]:
+            lines.append(
+                f"- {candidate['strategy_family']} | Asset {candidate['asset']} | "
+                f"{candidate['candidate_status']} | n={candidate['evaluated_outcomes']}/"
+                f"{candidate['required_min_outcomes']} | fav={candidate['favorable_rate']:.2%}/"
+                f"{candidate['required_favorable_rate']:.2%} | unfav={candidate['unfavorable_rate']:.2%}/"
+                f"{candidate['max_unfavorable_rate']:.2%} | adverse={_format_optional_pct(candidate['avg_adverse_move'])}/"
+                f"{candidate['max_allowed_adverse_move']:.2f}%"
+            )
     if summary.warnings:
         lines.extend(["", "Warnings:"])
         lines.extend(f"- {warning}" for warning in summary.warnings[:10])
@@ -402,6 +438,13 @@ def build_hypothesis_review_report(config: AppConfig) -> str:
                 f"- {candidate['strategy_family']} | Asset {candidate['asset']} | {candidate['reason']}"
             )
     return "\n".join(lines)
+
+
+def _format_optional_pct(value: object) -> str:
+    try:
+        return f"{float(value):.2f}%"
+    except (TypeError, ValueError):
+        return "N/A"
 
 
 if __name__ == "__main__":
